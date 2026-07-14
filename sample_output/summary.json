@@ -1,0 +1,181 @@
+{
+  "input_path": "database.pghembk",
+  "hands_parsed": 150000,
+  "parse_errors": 0,
+  "unique_players_with_stats_sample": 2713,
+  "shared_pair_count": 40781,
+  "candidate_count": 1507,
+  "important_note": "Risk points are configurable review-priority points based on player-side data only; they are not proof of multiaccounting.",
+  "config": {
+    "table_sizes_for_stats": [
+      6,
+      5
+    ],
+    "min_sample_to_compare": 50,
+    "min_points_to_report": 100,
+    "max_candidates": 10000,
+    "exclude_generic_ipoker_players": true,
+    "points": {
+      "vpip": [
+        {
+          "relative_diff_lte": 7.0,
+          "points": 5
+        },
+        {
+          "relative_diff_lte": 5.0,
+          "points": 10
+        },
+        {
+          "relative_diff_lte": 2.5,
+          "points": 20
+        },
+        {
+          "relative_diff_lte": 1.5,
+          "points": 30
+        },
+        {
+          "relative_diff_lte": 1.0,
+          "points": 40
+        },
+        {
+          "relative_diff_lte": 0.5,
+          "points": 50
+        }
+      ],
+      "pfr": [
+        {
+          "relative_diff_lte": 10.0,
+          "points": 5
+        },
+        {
+          "relative_diff_lte": 7.0,
+          "points": 10
+        },
+        {
+          "relative_diff_lte": 3.0,
+          "points": 20
+        },
+        {
+          "relative_diff_lte": 2.0,
+          "points": 30
+        },
+        {
+          "relative_diff_lte": 1.5,
+          "points": 40
+        },
+        {
+          "relative_diff_lte": 1.0,
+          "points": 50
+        }
+      ],
+      "threebet": [
+        {
+          "relative_diff_lte": 30.0,
+          "points": 5
+        },
+        {
+          "relative_diff_lte": 25.0,
+          "points": 10
+        },
+        {
+          "relative_diff_lte": 20.0,
+          "points": 20
+        },
+        {
+          "relative_diff_lte": 15.0,
+          "points": 30
+        },
+        {
+          "relative_diff_lte": 10.0,
+          "points": 40
+        },
+        {
+          "relative_diff_lte": 5.0,
+          "points": 50
+        }
+      ],
+      "wtsd": [
+        {
+          "relative_diff_lte": 7.0,
+          "points": 5
+        },
+        {
+          "relative_diff_lte": 5.0,
+          "points": 10
+        },
+        {
+          "relative_diff_lte": 2.5,
+          "points": 20
+        },
+        {
+          "relative_diff_lte": 1.5,
+          "points": 30
+        },
+        {
+          "relative_diff_lte": 1.0,
+          "points": 40
+        },
+        {
+          "relative_diff_lte": 0.5,
+          "points": 50
+        }
+      ],
+      "wonsd": [
+        {
+          "relative_diff_lte": 7.0,
+          "points": 5
+        },
+        {
+          "relative_diff_lte": 5.0,
+          "points": 10
+        },
+        {
+          "relative_diff_lte": 2.5,
+          "points": 20
+        },
+        {
+          "relative_diff_lte": 1.5,
+          "points": 30
+        },
+        {
+          "relative_diff_lte": 1.0,
+          "points": 40
+        },
+        {
+          "relative_diff_lte": 0.5,
+          "points": 50
+        }
+      ],
+      "sample": {
+        "gt": [
+          {
+            "sample_gt": 1000,
+            "points": 20
+          },
+          {
+            "sample_gt": 2000,
+            "points": 25
+          },
+          {
+            "sample_gt": 3000,
+            "points": 30
+          },
+          {
+            "sample_gt": 4000,
+            "points": 40
+          }
+        ],
+        "lt": [
+          {
+            "sample_lt": 100,
+            "points": -20
+          },
+          {
+            "sample_lt": 250,
+            "points": -10
+          }
+        ]
+      }
+    }
+  }
+}
