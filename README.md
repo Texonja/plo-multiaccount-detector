@@ -4,7 +4,7 @@ A local workspace for reviewing pairs of PLO players with similar playing profil
 
 ## Run on Windows
 
-[Download for Windows x64](https://github.com/Texonja/plo-multiaccount-detector/releases/download/v0.7/PLO-Detector-0.7-Windows-x64.zip)
+To run the detector on Windows without downloading or building the source code separately, use the portable ZIP. [Download for Windows x64](https://github.com/Texonja/plo-multiaccount-detector/releases/download/v0.7/PLO-Detector-0.7-Windows-x64.zip)
 
 Choose **Extract All**, then double-click **PLO-Detector.exe** in the extracted folder. The sample report opens immediately. Python and Tkinter are included.
 
