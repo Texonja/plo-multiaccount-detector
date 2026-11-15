@@ -2,9 +2,11 @@
 
 A local workspace for reviewing pairs of PLO players with similar playing profiles.
 
-## Open on Windows
+## Run on Windows
 
-Double-click **OPEN_DETECTOR.bat**. Requires Python 3.10 or newer with Tkinter. The included report opens immediately.
+[Download for Windows x64](https://github.com/Texonja/plo-multiaccount-detector/releases/download/v0.7/PLO-Detector-0.7-Windows-x64.zip)
+
+Choose **Extract All**, then double-click **PLO-Detector.exe** in the extracted folder. The sample report opens immediately. Python and Tkinter are included.
 
 | Ribbon action | What it does |
 | --- | --- |
@@ -25,11 +27,20 @@ The detector reconstructs VPIP, PFR, 3Bet, WTSD and W$SD from 5- and 6-handed pl
 
 Thresholds, sample sizes and the report limit are in `config.json`. Points prioritize pairs for manual review. Confirming a shared identity requires separate evidence.
 
-## Command line
+## Run from source
+
+With Python 3.10+ and Tkinter installed, double-click **OPEN_DETECTOR.bat** in the source checkout.
 
 `RUN_MULTIACCOUNT_REPORT.bat` runs the original batch workflow against `database.pghembk` and writes CSV, Markdown and JSON reports. For CLI options in PowerShell, run the following in the project directory.
 
 ```powershell
 $env:PYTHONPATH = "src"
 python -m plo_multiaccount_detector --help
+```
+
+To build the portable ZIP on Windows x64, use the python.org distribution with Tcl/Tk and run the following from the project directory.
+
+```powershell
+python -m pip install distlib==0.4.2
+python tools/build_windows.py PLO-Detector-0.7-Windows-x64.zip
 ```
