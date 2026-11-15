@@ -445,9 +445,9 @@ def write_csv_any(path: Path, rows: list[dict[str, object]]) -> None:
 def write_top_markdown(path: Path, rows: list[dict[str, object]], *, top: int = 50) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
-    lines.append("# PLO Multiaccount / Ghost Player / Similar-Profile Candidate Report")
+    lines.append("# PLO candidate pairs")
     lines.append("")
-    lines.append("This is a player-side review-priority report. It flags players with similar observed profiles. Zero mutual hands can suggest account replacement / multiaccount risk. High mutual hands can suggest possible coordinated bot/RTA/collusion cluster risk. It does not prove wrongdoing.")
+    lines.append("Pairs are ranked for manual review by playing-profile similarity and sample size.")
     lines.append("")
     lines.append("| # | Player A | Player B | Risk points | Mutual hands | A hands | B hands | Min sample | VPIP match | PFR match | 3bet match | WTSD match | WonSD match |")
     lines.append("|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")

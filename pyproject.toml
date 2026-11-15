@@ -1,5 +1,5 @@
 [project]
 name = "plo-multiaccount-detector"
-version = "0.5.0"
+version = "0.7"
 description = "HM2-focused PLO multiaccount / ghost-player candidate detector"
 requires-python = ">=3.10"
