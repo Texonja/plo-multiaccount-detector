@@ -163,32 +163,20 @@ def is_generic_player(name: str) -> bool:
 
 
 def _live_sets(hand: ParsedHand) -> tuple[set[str], set[str]]:
-    """Return (saw_flop_players, showdown_players) reconstructed from action flow.
-
-    `saw_flop_players` are players still live when the flop betting round begins.
-    `showdown_players` are saw-flop players still live after the final recorded
-    betting action. This correctly captures most all-in/showdown hands from raw
-    HH without relying on HM2's HUD cache.
-    """
-    players = set(hand.active_players)
-    live = set(players)
-    saw_flop: set[str] = set()
-    flop_started = False
-
+    """Players live at the flop and after the final betting action."""
+    live = set(hand.active_players)
+    reached_flop = len(hand.board) >= 3
+    preflop_folds = set()
     for action in hand.actions:
-        if action.player not in players:
-            continue
-        if action.street == "FLOP" and not flop_started:
-            saw_flop = set(live)
-            flop_started = True
+        if action.street in POSTFLOP_STREETS:
+            reached_flop = True
         if action.action == "fold":
             live.discard(action.player)
-
-    # Showdown reconstruction: at least two players who saw the flop are still live at
-    # the end of the recorded betting action. Heads-up all-in before river still
-    # counts if both players remain live.
-    showdown_players = (live & saw_flop) if len(live & saw_flop) >= 2 else set()
-    return saw_flop, showdown_players
+            if action.street == "PREFLOP":
+                preflop_folds.add(action.player)
+    saw_flop = set(hand.active_players) - preflop_folds if reached_flop else set()
+    showdown = saw_flop & live
+    return saw_flop, showdown if len(showdown) >= 2 else set()
 
 
 def add_hand(run: MultiaccountRun, hand: ParsedHand, *, table_sizes_for_stats: set[int]) -> None:

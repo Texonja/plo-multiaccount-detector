@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import re
 import html
-import xml.etree.ElementTree as ET
 from typing import Iterable
 
 
@@ -319,11 +318,6 @@ def parse_text_hand_history(raw_text: str, *, fallback_hand_id: int | None = Non
     return hand
 
 
-def _child_text(parent: ET.Element, path: str, default: str = "") -> str:
-    el = parent.find(path)
-    return el.text.strip() if el is not None and el.text else default
-
-
 def _card_text_to_space(cards: str) -> str:
     return " ".join(cards.split())
 
@@ -435,9 +429,16 @@ def parse_ipoker_xml_hand_history_fast(raw_text: str, *, fallback_hand_id: int |
                     street_contrib[player] = street_contrib.get(player, 0.0) + amount_raw
                 elif typ in {"7", "23"}:
                     prev = street_contrib.get(player, 0.0)
-                    delta = max(0.0, amount_raw - prev)
-                    hand.actions.append(Action(player, street, "raise", amount=delta, to_amount=amount_raw, raw=raw))
-                    street_contrib[player] = max(prev, amount_raw)
+                    total = prev + amount_raw
+                    kind = "raise"
+                    if typ == "7":
+                        outstanding = max(street_contrib.values(), default=0.0)
+                        if total <= outstanding + 1e-9:
+                            kind = "call"
+                        elif outstanding == 0 and street != "PREFLOP":
+                            kind = "bet"
+                    hand.actions.append(Action(player, street, kind, amount=amount_raw, to_amount=total, raw=raw))
+                    street_contrib[player] = total
                 else:
                     hand.actions.append(Action(player, street, f"unknown_{typ}", amount=amount_raw, raw=raw))
             else:  # cards
@@ -449,132 +450,6 @@ def parse_ipoker_xml_hand_history_fast(raw_text: str, *, fallback_hand_id: int |
                     hand.dealt_cards[player] = cards
                 elif ctype in {"Flop", "Turn", "River"}:
                     hand.board.extend(cards.split())
-
-    if hand.contributions:
-        hand.total_pot = sum(hand.contributions.values())
-    return hand
-
-
-def parse_ipoker_xml_hand_history(raw_text: str, *, fallback_hand_id: int | None = None) -> ParsedHand:
-    xml_text = raw_text.strip()
-    # HM2 sometimes stores iPoker rows as a session fragment ending after </game>
-    # without the final </session>. Close it before ElementTree parsing.
-    if xml_text.startswith("<?xml") and "<session" in xml_text and "</session>" not in xml_text:
-        xml_text += "\n</session>"
-    try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError as exc:
-        raise HandParseError(f"Invalid iPoker XML: {exc}") from exc
-
-    game = root.find("game")
-    if game is None:
-        raise HandParseError("iPoker XML has no <game> node")
-
-    session_general = root.find("general")
-    if session_general is None:
-        raise HandParseError("iPoker XML has no session <general> node")
-
-    game_general = game.find("general")
-    if game_general is None:
-        raise HandParseError("iPoker XML game has no <general> node")
-
-    hand_id = int(game.attrib.get("gamecode") or fallback_hand_id or 0)
-    table_name = _child_text(session_general, "tablename", "UNKNOWN")
-    sb = parse_money(_child_text(session_general, "smallblind", "0"))
-    bb = parse_money(_child_text(session_general, "bigblind", "1")) or 1.0
-    timestamp = _parse_datetime(_child_text(game_general, "startdate", ""))
-    max_players_text = _child_text(session_general, "tablesize", "")
-    max_players = int(max_players_text) if max_players_text.isdigit() else None
-
-    hand = ParsedHand(
-        hand_id=hand_id,
-        table_name=table_name,
-        timestamp=timestamp,
-        small_blind=sb,
-        big_blind=bb,
-        max_players=max_players,
-        raw_text=raw_text,
-        source_format="ipoker_xml",
-    )
-
-    players_el = game_general.find("players")
-    if players_el is not None:
-        for p in players_el.findall("player"):
-            name = p.attrib.get("name", "").strip()
-            if not name:
-                continue
-            seat_no = int(p.attrib.get("seat") or 0)
-            stack = parse_money(p.attrib.get("chips"))
-            hand.seats[seat_no] = Seat(seat_no=seat_no, player=name, stack=stack)
-            if p.attrib.get("dealer") == "1":
-                hand.button_seat = seat_no
-
-            # HM2 iPoker XML stores per-hand player bet/win attributes. `bet`
-            # works well as money at risk. `win` is a useful result proxy, but
-            # not always a perfect gross-pot reconstruction when uncalled bets
-            # are involved, so reports label this as net proxy.
-            bet = parse_money(p.attrib.get("bet"))
-            win = parse_money(p.attrib.get("win"))
-            if bet:
-                hand.contributions[name] = bet
-            if win:
-                hand.winnings[name] = bet + win
-
-    street_by_round = {"0": "PREFLOP", "1": "PREFLOP", "2": "FLOP", "3": "TURN", "4": "RIVER"}
-    current_street_contrib: dict[str, float] = {}
-    for rnd in game.findall("round"):
-        no = rnd.attrib.get("no", "")
-        street = street_by_round.get(no, f"ROUND_{no}")
-        current_street_contrib = {}
-        for node in list(rnd):
-            if node.tag == "cards":
-                ctype = node.attrib.get("type", "")
-                cards = _card_text_to_space(node.text or "")
-                player = node.attrib.get("player")
-                if ctype == "Pocket" and player:
-                    if "X" not in cards.split():
-                        hand.dealt_cards[player] = cards
-                    elif player not in hand.dealt_cards:
-                        hand.dealt_cards[player] = cards
-                elif ctype in {"Flop", "Turn", "River"}:
-                    hand.board.extend(cards.split())
-                continue
-
-            if node.tag != "action":
-                continue
-            player = node.attrib.get("player", "").strip()
-            if not player:
-                continue
-            typ = node.attrib.get("type", "")
-            amount_raw = parse_money(node.attrib.get("sum"))
-            raw = ET.tostring(node, encoding="unicode").strip()
-
-            if typ == "0":
-                hand.actions.append(Action(player, street, "fold", amount=0.0, raw=raw))
-            elif typ == "1":
-                hand.actions.append(Action(player, "PREFLOP", "post_small_blind", amount=amount_raw, raw=raw))
-            elif typ == "2":
-                hand.actions.append(Action(player, "PREFLOP", "post_big_blind", amount=amount_raw, raw=raw))
-            elif typ == "3":
-                # Call amount is incremental in iPoker XML examples.
-                hand.actions.append(Action(player, street, "call", amount=amount_raw, raw=raw))
-                current_street_contrib[player] = current_street_contrib.get(player, 0.0) + amount_raw
-            elif typ == "4":
-                hand.actions.append(Action(player, street, "check", amount=0.0, raw=raw))
-            elif typ == "5":
-                hand.actions.append(Action(player, street, "bet", amount=amount_raw, raw=raw))
-                current_street_contrib[player] = current_street_contrib.get(player, 0.0) + amount_raw
-            elif typ in {"7", "23"}:
-                # Raise `sum` is usually total amount for that street; use delta
-                # as amount, keep total in to_amount.
-                prev = current_street_contrib.get(player, 0.0)
-                delta = max(0.0, amount_raw - prev)
-                hand.actions.append(Action(player, street, "raise", amount=delta, to_amount=amount_raw, raw=raw))
-                current_street_contrib[player] = max(current_street_contrib.get(player, 0.0), amount_raw)
-            else:
-                # Unknown iPoker type: keep it out of relationship stats, but
-                # preserve raw action for debugging.
-                hand.actions.append(Action(player, street, f"unknown_{typ}", amount=amount_raw, raw=raw))
 
     if hand.contributions:
         hand.total_pot = sum(hand.contributions.values())
