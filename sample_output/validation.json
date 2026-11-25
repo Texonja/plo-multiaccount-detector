@@ -2,7 +2,13 @@
   "neighbor_list_size": 50,
   "assumption": "Idealized upper bound: same player, same period, no deliberate style change.",
   "split": "hand_id % 2",
-  "precision_at_k_ties": "All eligible pairs, before the score filter. Mutual order uses mutual rank first. Both use descending score, then ascending account names. Null if fewer than K pairs exist.",
+  "max_candidates": 2000,
+  "precision_at_k_scope": {
+    "precision_at_k_mutual_rank": "Apply the report threshold, sort by ascending mutual rank and descending score, then apply the report cap.",
+    "precision_at_k_mutual_rank_unfiltered": "Same order across all eligible pairs, without the threshold or cap.",
+    "precision_at_k": "Descending score across all eligible pairs, without the threshold or cap."
+  },
+  "precision_at_k_ties": "Break ties by ascending account names. Each result is null if fewer than K pairs are available.",
   "eligible_accounts": 1669,
   "known_pairs": 826,
   "compared_pairs": 1391946,
@@ -85,11 +91,24 @@
       }
     },
     "threshold": {
-      "minimum": 2.5,
-      "flagged_pairs": 1845,
-      "true_pairs_flagged": 83,
-      "precision": 0.044986449864498644,
-      "recall": 0.10048426150121065
+      "minimum": 2.0,
+      "flagged_pairs": 7838,
+      "true_pairs_flagged": 182,
+      "precision": 0.023220209237050267,
+      "recall": 0.22033898305084745
+    },
+    "report_pairs": 2000,
+    "precision_at_k_mutual_rank": {
+      "100": 0.39,
+      "500": 0.18,
+      "1000": 0.121,
+      "1500": 0.09
+    },
+    "precision_at_k_mutual_rank_unfiltered": {
+      "100": 0.39,
+      "500": 0.168,
+      "1000": 0.112,
+      "1500": 0.09266666666666666
     },
     "precision_at_k": {
       "100": 0.18,
@@ -97,11 +116,9 @@
       "1000": 0.061,
       "1500": 0.048666666666666664
     },
-    "precision_at_k_mutual_rank": {
-      "100": 0.39,
-      "500": 0.168,
-      "1000": 0.112,
-      "1500": 0.09266666666666666
+    "mutual_rank_one": {
+      "known_twins": 46,
+      "known_twins_passing_filter": 44
     },
     "twin_ranks": [
       {
@@ -11749,11 +11766,24 @@
       }
     },
     "threshold": {
-      "minimum": 2.5,
-      "flagged_pairs": 4014,
-      "true_pairs_flagged": 97,
-      "precision": 0.024165421026407573,
-      "recall": 0.11743341404358354
+      "minimum": 2.0,
+      "flagged_pairs": 13372,
+      "true_pairs_flagged": 201,
+      "precision": 0.015031408914148968,
+      "recall": 0.24334140435835352
+    },
+    "report_pairs": 2000,
+    "precision_at_k_mutual_rank": {
+      "100": 0.38,
+      "500": 0.166,
+      "1000": 0.116,
+      "1500": 0.08866666666666667
+    },
+    "precision_at_k_mutual_rank_unfiltered": {
+      "100": 0.38,
+      "500": 0.162,
+      "1000": 0.112,
+      "1500": 0.08733333333333333
     },
     "precision_at_k": {
       "100": 0.13,
@@ -11761,11 +11791,9 @@
       "1000": 0.047,
       "1500": 0.038
     },
-    "precision_at_k_mutual_rank": {
-      "100": 0.38,
-      "500": 0.162,
-      "1000": 0.112,
-      "1500": 0.08733333333333333
+    "mutual_rank_one": {
+      "known_twins": 44,
+      "known_twins_passing_filter": 41
     },
     "twin_ranks": [
       {
@@ -23413,11 +23441,24 @@
       }
     },
     "threshold": {
-      "minimum": 100,
+      "minimum": 100.0,
       "flagged_pairs": 2295,
       "true_pairs_flagged": 47,
       "precision": 0.020479302832244008,
       "recall": 0.05690072639225181
+    },
+    "report_pairs": 2000,
+    "precision_at_k_mutual_rank": {
+      "100": 0.1,
+      "500": 0.05,
+      "1000": 0.032,
+      "1500": 0.02666666666666667
+    },
+    "precision_at_k_mutual_rank_unfiltered": {
+      "100": 0.1,
+      "500": 0.048,
+      "1000": 0.032,
+      "1500": 0.024666666666666667
     },
     "precision_at_k": {
       "100": 0.09,
@@ -23425,11 +23466,9 @@
       "1000": 0.032,
       "1500": 0.02666666666666667
     },
-    "precision_at_k_mutual_rank": {
-      "100": 0.1,
-      "500": 0.048,
-      "1000": 0.032,
-      "1500": 0.024666666666666667
+    "mutual_rank_one": {
+      "known_twins": 17,
+      "known_twins_passing_filter": 17
     },
     "twin_ranks": [
       {

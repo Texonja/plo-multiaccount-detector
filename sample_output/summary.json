@@ -4,7 +4,7 @@
   "parse_errors": 0,
   "unique_players_with_stats_sample": 2713,
   "shared_pair_count": 40781,
-  "candidate_count": 923,
+  "candidate_count": 2000,
   "grid_prior": {
     "theta": [
       0.0025,
@@ -2454,8 +2454,8 @@
     }
   ],
   "eligible_players": 1247,
-  "pairs_above_threshold": 923,
-  "self_test": "Self-test: twin in the top 10 for 29.2% of 1,652 accounts.",
+  "pairs_above_threshold": 3453,
+  "self_test": "Self-test: 39% known twins in the first 100 reported pairs.",
   "score_units": "log10 likelihood ratio",
   "config": {
     "table_sizes_for_stats": [
@@ -2464,7 +2464,7 @@
     ],
     "min_sample_to_compare": 50,
     "min_points_to_report": 100,
-    "min_score_to_report": 2.5,
+    "min_score_to_report": 2.0,
     "max_candidates": 2000,
     "neighbor_list_size": 50,
     "exclude_generic_ipoker_players": true,

@@ -1,10 +1,10 @@
-# PLO Multiaccount Detector 0.8.1
+# PLO Multiaccount Detector 0.8.2
 
 A local desktop tool for reviewing PLO accounts with similar playing profiles.
 
 ## Run on Windows
 
-Download and extract the ZIP, then double-click **PLO-Detector.exe**. It includes Python, Tkinter, NumPy, the backup and the sample report. [Download for Windows x64](https://github.com/Texonja/plo-multiaccount-detector/releases/download/v0.8.1/PLO-Detector-0.8.1-Windows-x64.zip)
+Download and extract the ZIP, then double-click **PLO-Detector.exe**. It includes Python, Tkinter, NumPy, the backup and the sample report. [Download for Windows x64](https://github.com/Texonja/plo-multiaccount-detector/releases/download/v0.8.2/PLO-Detector-0.8.2-Windows-x64.zip)
 
 | Ribbon action | What it does |
 | --- | --- |
@@ -31,36 +31,27 @@ The five contributions add on a base-10 log scale. A contribution of +1 gives th
 
 The report uses 5- and 6-handed play and requires 50 hands per account by default. Each eligible player gets a list of their 50 closest neighbors by score. **Mutual rank** is the worse of the two directional ranks. A missing direction receives 51. A mutual rank of 1 means each is the other's closest match. `neighbor_list_size` controls the list length. Ties within a list use the account name.
 
-The report filters at score 2.5, orders by ascending mutual rank and then descending score, and keeps up to 2,000 pairs. The sample returns **923 pairs** from 1,247 eligible players. Shared hands and dates provide review context. Any account seated in more than half of all parsed hands is labeled **probable database owner** and retains its normal eligibility. The CSV includes the previous Beta score in `legacy_beta_score` for comparison, alongside the earlier points columns.
+The report filters at score 2.0, orders by ascending mutual rank and then descending score, and keeps up to 2,000 pairs. On the 150,000-hand sample, **3,453 pairs** pass the filter and **2,000** appear in the report. Shared hands and dates provide review context. Any account seated in more than half of all parsed hands is labeled **probable database owner** and retains its normal eligibility. The CSV includes the previous Beta score in `legacy_beta_score` for comparison, alongside the earlier points columns.
 
 ## Split-half self-test
 
 Even and odd hand IDs form two profiles per account. An eligible half competes against all other eligible accounts. Priors are fitted once on the full profiles. This is an idealized upper bound for finding a known twin in the same period without a deliberate style change.
 
-The sample contains 1,669 eligible halves, 826 known pairs and 1,391,946 unordered pairs. Top-10 measures where each account's own twin ranks by raw score. Precision@K measures how many of the first K **pairs across the entire split** are twins, before applying the report threshold. Equal ordering keys are resolved by account name.
+The sample contains 1,669 eligible halves, 826 known twins and 1,391,946 unordered pairs. Precision@K is the share of known twins among the first K rows produced by the report pipeline. The self-test applies the score threshold, sorts by ascending mutual rank and descending score, then applies the report cap. Account names break ties. Neighbor ranks are computed from all eligible profiles before filtering.
 
-| Version / prior | Pair ordering | Precision@100 | @500 | @1,000 | @1,500 |
-| --- | --- | ---: | ---: | ---: | ---: |
-| 0.8 · Beta | score | 13.0% | 7.8% | 4.7% | 3.8% |
-| 0.8.1 · Beta | score | 13.0% | 7.8% | 4.7% | 3.8% |
-| 0.8.1 · Beta | mutual rank | 38.0% | 16.2% | 11.2% | 8.7% |
-| 0.8.1 · Grid | score | 18.0% | 9.2% | 6.1% | 4.9% |
-| 0.8.1 · Grid | mutual rank | 39.0% | 16.8% | 11.2% | 9.3% |
+| Grid score pipeline | Precision@100 | @500 | @1,000 | @1,500 |
+| --- | ---: | ---: | ---: | ---: |
+| 0.8.1 report · score ≥2.5 | 34.0% | 13.4% | 7.4% | 5.3% |
+| 0.8.2 report · score ≥2.0 | 39.0% | 18.0% | 12.1% | 9.0% |
+| Unfiltered · mutual rank | 39.0% | 16.8% | 11.2% | 9.3% |
+| Unfiltered · raw score | 18.0% | 9.2% | 6.1% | 4.9% |
 
-| Version / prior | Twin in top 10 | Median twin rank | Split pairs scoring ≥2.5 | Known twins flagged | Precision | Recall |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 0.8 · Beta | 28.9% | 36.5 | 4,015 | 98 | 2.4% | 11.9% |
-| 0.8.1 · Beta | 29.0% | 36.5 | 4,014 | 97 | 2.4% | 11.7% |
-| 0.8.1 · Grid | 29.2% | 34 | 1,845 | 83 | 4.5% | 10.0% |
-
-| Hands in smaller half | Accounts | 0.8 twin in top 10 | 0.8.1 twin in top 10 |
+| Score filter | Split pairs passing | Known twins passing | Mutual-rank-1 twins passing |
 | --- | ---: | ---: | ---: |
-| 50–149 | 992 | 14.8% | 15.1% |
-| 150–499 | 456 | 42.1% | 42.5% |
-| 500–1,499 | 150 | 61.3% | 61.3% |
-| 1,500+ | 54 | 87.0% | 85.2% |
+| ≥2.5 | 1,845 | 83 / 826 | 31 / 46 |
+| ≥2.0 | 7,838 | 182 / 826 | 44 / 46 |
 
-Correcting the parser alone preserved all 100 pairs in the previous top 100. With the grid, the former first pair, **P4nd4Drift / falcon_mirror**, moves to report position **64**. Its 3Bet contribution falls from **4.61** to **1.33**. Even in this controlled test, only 39 of the first 100 pairs are known twins. Establishing a common operator requires separate evidence.
+The score and population prior are the same as in 0.8.1. By raw score, an account's twin appears in its top 10 in 29.2% of cases. The shortlist is for manual review. Establishing a common operator requires separate evidence.
 
 The GUI opens the sample at startup. Desktop analyses write to `reports/`. [Sample shortlist](sample_output/top_candidates.md) · [Full validation and individual ranks](sample_output/validation.json)
 
@@ -91,5 +82,5 @@ To build the portable ZIP using 64-bit python.org Python on Windows with Tcl/Tk 
 
 ```powershell
 python -m pip install -r requirements.txt distlib==0.4.2
-python tools/build_windows.py PLO-Detector-0.8.1-Windows-x64.zip
+python tools/build_windows.py PLO-Detector-0.8.2-Windows-x64.zip
 ```
