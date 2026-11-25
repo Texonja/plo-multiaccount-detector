@@ -7,6 +7,7 @@ import sys
 import time
 
 from .hm2_backup import iter_hm2_handhistories
+from .likelihood import fit_priors
 from .hh_parser import parse_hand_history
 from .multiaccount import (
     MultiaccountRun,
@@ -82,13 +83,16 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("Interrupted. Writing partial report...", file=sys.stderr)
 
-    candidates = find_candidates(run, config)
+    priors = fit_priors(run.player_stats.values())
+    totals = {}
+    candidates = find_candidates(run, config, priors, totals=totals)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     write_csv(out / "multiaccount_candidates.csv", candidates)
     write_top_markdown(out / "top_candidates.md", candidates, top=args.top)
-    write_summary(out / "summary.json", run=run, rows=candidates, config=config, input_path=str(input_path))
+    write_summary(out / "summary.json", run=run, rows=candidates, config=config, input_path=str(input_path),
+                  priors=priors, totals=totals)
     if run.parse_error_rows:
         write_csv_any(out / "parse_errors.csv", run.parse_error_rows)
 

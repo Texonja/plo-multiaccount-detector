@@ -12,11 +12,15 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from itertools import combinations
 import csv
+import heapq
+
+import numpy as np
 import json
 from pathlib import Path
 from typing import Any
 
 from .hh_parser import ParsedHand
+from .likelihood import STATS, LikelihoodScores, fit_priors
 
 VOLUNTARY_PREFLOP = {"call", "bet", "raise"}
 PFR_ACTIONS = {"bet", "raise"}
@@ -28,7 +32,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "table_sizes_for_stats": [6, 5],
     "min_sample_to_compare": 50,
     "min_points_to_report": 100,
-    "max_candidates": 10000,
+    "min_score_to_report": 3.0,
+    "max_candidates": 2000,
     "exclude_generic_ipoker_players": True,
     "points": {
         "vpip": [
@@ -340,13 +345,15 @@ def score_pair(a: str, b: str, pa: PlayerProfile, pb: PlayerProfile, config: dic
     sp = sample_points(sample, point_cfg.get("sample", {}))
     row["sample_points"] = sp
     total += sp
+    row["legacy_points"] = total
     row["risk_points"] = total
     return row
 
 
 REPORT_COLUMNS = [
     # Identity / review-priority fields
-    "player_a", "player_b", "risk_points", "mutual_hands",
+    "player_a", "player_b", "score", *(f"{key}_log10_lr" for key, _, _ in STATS),
+    "legacy_points", "risk_points", "mutual_hands",
     "player_a_sample_hands", "player_b_sample_hands", "min_sample_hands", "sample_points",
 
     # Match columns grouped together for fast spreadsheet review
@@ -375,38 +382,51 @@ REPORT_COLUMNS = [
 ]
 
 
-def find_candidates(run: MultiaccountRun, config: dict[str, Any]) -> list[dict[str, object]]:
-    min_sample = int(config.get("min_sample_to_compare", 50))
-    min_points = int(config.get("min_points_to_report", 100))
-    max_candidates = int(config.get("max_candidates", 10000))
-    exclude_generic = bool(config.get("exclude_generic_ipoker_players", True))
+def eligible_players(profiles, config, *, split=False):
+    minimum = int(config["min_sample_to_compare"])
+    return sorted(name for name, profile in profiles.items()
+                  if profile.hands >= minimum and not (
+                      config["exclude_generic_ipoker_players"] and
+                      is_generic_player(name[:-2] if split else name)))
 
-    eligible = [
-        p for p, ps in run.player_stats.items()
-        if ps.hands >= min_sample and (not exclude_generic or not is_generic_player(p))
-    ]
-    eligible.sort()
 
-    rows: list[dict[str, object]] = []
-    for a, b in combinations(eligible, 2):
-        pa = run.player_stats[a]
-        pb = run.player_stats[b]
-        mutual_hands = int(run.shared_pair_counts.get(pair_key(a, b), 0))
-        row = score_pair(a, b, pa, pb, config, mutual_hands=mutual_hands)
-        if int(row["risk_points"]) >= min_points:
-            rows.append(row)
-
-    rows.sort(
-        key=lambda r: (
-            int(r["risk_points"]),
-            int(r["min_sample_hands"]),
-            float(r["vpip_match_pct"]),
-            float(r["pfr_match_pct"]),
-            int(r["mutual_hands"]),
-        ),
-        reverse=True,
-    )
-    return rows[:max_candidates]
+def find_candidates(run, config, priors=None, *, totals=None):
+    if priors is None:
+        priors = fit_priors(run.player_stats.values())
+    names = eligible_players(run.player_stats, config)
+    profiles = [run.player_stats[name] for name in names]
+    model = LikelihoodScores(profiles, priors)
+    threshold = float(config["min_score_to_report"])
+    cap = int(config["max_candidates"])
+    if cap < 0:
+        raise ValueError("max_candidates must be nonnegative")
+    best = []
+    flagged = 0
+    for i in range(len(names) - 1):
+        scores = model.row(i, slice(i + 1, None))
+        hits = np.flatnonzero(scores >= threshold)
+        flagged += len(hits)
+        for offset in hits:
+            j = i + 1 + int(offset)
+            # Equal scores are ordered by player names in ascending order.
+            entry = float(scores[offset]), -i, -j
+            if len(best) < cap:
+                heapq.heappush(best, entry)
+            elif best and entry > best[0]:
+                heapq.heapreplace(best, entry)
+    if totals is not None:
+        totals.update(eligible_players=len(names), pairs_above_threshold=flagged)
+    rows = []
+    for score, neg_i, neg_j in sorted(best, reverse=True):
+        i, j = -neg_i, -neg_j
+        a, b = names[i], names[j]
+        row = score_pair(a, b, profiles[i], profiles[j], config,
+                         mutual_hands=run.shared_pair_counts.get((a, b), 0))
+        row.update(score=round(score, 9))
+        row.update({f"{key}_log10_lr": round(float(value), 9)
+                    for key, value in model.components(i, j).items()})
+        rows.append(row)
+    return rows
 
 
 def write_csv(path: Path, rows: list[dict[str, object]]) -> None:
@@ -430,25 +450,28 @@ def write_csv_any(path: Path, rows: list[dict[str, object]]) -> None:
         writer.writerows(rows)
 
 
-def write_top_markdown(path: Path, rows: list[dict[str, object]], *, top: int = 50) -> None:
+def write_top_markdown(path: Path, rows: list[dict[str, object]], *, top: int = 50, self_test=None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
     lines.append("# PLO candidate pairs")
     lines.append("")
     lines.append("Pairs are ranked for manual review by playing-profile similarity and sample size.")
     lines.append("")
-    lines.append("| # | Player A | Player B | Risk points | Mutual hands | A hands | B hands | Min sample | VPIP match | PFR match | 3bet match | WTSD match | WonSD match |")
+    if self_test:
+        lines.extend(["## Split-half self-test", "", self_test, "",
+                      "Idealized upper bound: same player, same period, no deliberate style change.", ""])
+    lines.append("| # | Player A | Player B | Score (log10 LR) | Mutual hands | A hands | B hands | Min sample | VPIP match | PFR match | 3bet match | WTSD match | WonSD match |")
     lines.append("|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for i, r in enumerate(rows[:top], start=1):
         lines.append(
-            f"| {i} | {r['player_a']} | {r['player_b']} | {r['risk_points']} | {r['mutual_hands']} | "
+            f"| {i} | {r['player_a']} | {r['player_b']} | {r['score']:.3f} | {r['mutual_hands']} | "
             f"{r['player_a_sample_hands']} | {r['player_b_sample_hands']} | {r['min_sample_hands']} | "
             f"{r['vpip_match_pct']} | {r['pfr_match_pct']} | {r['threebet_match_pct']} | {r['wtsd_match_pct']} | {r['wonsd_match_pct']} |"
         )
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def write_summary(path: Path, *, run: MultiaccountRun, rows: list[dict[str, object]], config: dict[str, Any], input_path: str) -> None:
+def write_summary(path: Path, *, run: MultiaccountRun, rows: list[dict[str, object]], config: dict[str, Any], input_path: str, priors, totals, self_test=None) -> None:
     summary = {
         "input_path": input_path,
         "hands_parsed": run.hands_parsed,
@@ -456,7 +479,10 @@ def write_summary(path: Path, *, run: MultiaccountRun, rows: list[dict[str, obje
         "unique_players_with_stats_sample": len(run.player_stats),
         "shared_pair_count": len(run.shared_pair_counts),
         "candidate_count": len(rows),
-        "important_note": "Risk points are configurable review-priority points based on player-side data only; they are not proof of multiaccounting.",
+        "priors": priors,
+        **totals,
+        "self_test": self_test,
+        "score_units": "log10 likelihood ratio",
         "config": config,
     }
     path.parent.mkdir(parents=True, exist_ok=True)

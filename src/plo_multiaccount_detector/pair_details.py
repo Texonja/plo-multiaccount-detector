@@ -151,6 +151,21 @@ class PairDetails(tk.Frame):
 
     def draw_scores(self, width):
         left, right = 16, width-16
+        if "score" in self.row:
+            self.text(left, 22, "Stat", color=MUTED)
+            self.text(right, 22, "log10 LR", color=MUTED, anchor="e")
+            self.line(left, 38, right, 38)
+            for i, (key, name) in enumerate(STATS):
+                if key == "pfr":
+                    key, name = "pfr_given_vpip", "PFR | VPIP"
+                y = 57 + i * 33
+                self.text(left, y, name, bold=True)
+                self.text(right, y, decimal(self.row.get(f"{key}_log10_lr")), anchor="e")
+                self.line(left, y + 16, right, y + 16)
+            self.rect(left - 5, 225, right + 5, 267, INSET)
+            self.text(left + 3, 246, "Total score", bold=True)
+            self.text(right - 4, 246, decimal(self.row["score"]), color=AMBER, size=14, bold=True, anchor="e")
+            return 282
         match, diff = left+(right-left)*.5, left+(right-left)*.77
         for x, title in ((left, "Stat"), (match, "Match"), (diff, "Rel. diff."), (right, "Points")):
             self.text(x, 22, title, color=MUTED, anchor="w" if x == left else "e")

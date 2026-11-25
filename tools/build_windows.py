@@ -1,6 +1,6 @@
 """Build the portable ZIP using a Windows x64 python.org installation with Tk."""
 import argparse
-from importlib.metadata import files
+from importlib.metadata import distribution, files
 import os
 from pathlib import Path
 import platform
@@ -37,9 +37,18 @@ def copy_runtime(runtime):
                 path = Path(directory) / name
                 if path.suffix not in {".pyc", ".pyo"}:
                     archive.write(path, path.relative_to(lib))
+    # Copy the installed wheel, including its native BLAS DLLs and licenses.
+    wheel = distribution("numpy")
+    packages = runtime / "packages"
+    for entry in wheel.files:
+        if not entry.parts[0].startswith("numpy") or "__pycache__" in entry.parts:
+            continue
+        target = packages / entry
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(wheel.locate_file(entry), target)
     # A DLL-specific ._pth keeps the GUI and its -m analysis subprocess on this
     # runtime, even when Python is absent or another installation is on PATH.
-    (runtime / f"{version}._pth").write_text(f"{version}.zip\nDLLs\n.\n../src\n", encoding="ascii")
+    (runtime / f"{version}._pth").write_text(f"{version}.zip\nDLLs\npackages\n.\n../src\n", encoding="ascii")
 
 
 def build(output):

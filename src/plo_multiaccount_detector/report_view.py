@@ -40,8 +40,9 @@ class Report:
     def read(cls, path: Path) -> "Report":
         with path.open(encoding="utf-8-sig", newline="") as stream:
             reader = csv.DictReader(stream)
-            if not {"player_a", "player_b", "risk_points"}.issubset(reader.fieldnames or ()):
-                raise ValueError("The CSV must include player_a, player_b and risk_points.")
+            fields = set(reader.fieldnames or ())
+            if not {"player_a", "player_b"} <= fields or not {"score", "risk_points"} & fields:
+                raise ValueError("The CSV must include player_a, player_b and either score or risk_points.")
             rows = list(reader)
         if any(not row.get("player_a") or not row.get("player_b") for row in rows):
             raise ValueError("A player name is missing from the report.")

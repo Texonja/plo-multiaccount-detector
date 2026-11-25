@@ -6,7 +6,7 @@ from .ui_theme import AMBER, INSET, LINE, MUTED, PANEL, SURFACE, TEXT, font, lab
 
 COLUMNS = (
     ("rank", "#", 43), ("player_a", "Player A", 138), ("player_b", "Player B", 138),
-    ("risk_points", "Points", 66), ("mutual_hands", "Shared hands", 101),
+    ("score", "Score", 66), ("mutual_hands", "Shared hands", 101),
     ("min_sample_hands", "Min. hands", 88), ("vpip_match_pct", "VPIP match", 90),
     ("pfr_match_pct", "PFR match", 90),
 )
@@ -18,7 +18,7 @@ class CandidateTable(tk.Frame):
         self.on_select = on_select
         self.rows = []
         self.order = []
-        self.sort_by = "risk_points"
+        self.sort_by = "score"
         self.descending = True
         self.query = tk.StringVar()
         bar = tk.Frame(self, bg=PANEL)
@@ -93,6 +93,8 @@ class CandidateTable(tk.Frame):
 
     def headings(self):
         for key, title, _ in COLUMNS:
+            if key == "score" and self.rows and "score" not in self.rows[0]:
+                title = "Points"
             if key == self.sort_by:
                 title += " ▾" if self.descending else " ▴"
             self.grid_view.heading(key, text=title, command=lambda k=key: self.sort(k),
@@ -106,7 +108,7 @@ class CandidateTable(tk.Frame):
 
     def set_rows(self, rows):
         self.rows = rows
-        self.sort_by, self.descending = "risk_points", True
+        self.sort_by, self.descending = "score", True
         self.headings()
         self.grid_view.selection_remove(self.grid_view.selection())
         self.query.set("")
@@ -121,6 +123,8 @@ class CandidateTable(tk.Frame):
             if self.sort_by == "rank":
                 return i
             raw = self.rows[i].get(self.sort_by)
+            if self.sort_by == "score" and raw is None:
+                raw = self.rows[i].get("risk_points")
             if self.sort_by in ("player_a", "player_b"):
                 return raw.casefold()
             n = number(raw)
@@ -131,11 +135,12 @@ class CandidateTable(tk.Frame):
         for index, i in enumerate(self.order):
             row = self.rows[i]
             values = [integer(i+1), row["player_a"], row["player_b"],
-                      *(integer(row.get(key)) for key, _, _ in COLUMNS[3:6]),
+                      decimal(row["score"]) if "score" in row else integer(row.get("risk_points")),
+                      integer(row.get("mutual_hands")), integer(row.get("min_sample_hands")),
                       decimal(row.get("vpip_match_pct")), decimal(row.get("pfr_match_pct"))]
             tree.insert("", "end", iid=str(i), values=values, tags=("even" if index % 2 else "odd",))
             if self.cell_colors:
-                tree.tk.call(tree, "tag", "cell", "add", "points", (str(i), "risk_points"))
+                tree.tk.call(tree, "tag", "cell", "add", "points", (str(i), "score"))
                 for stat in ("vpip", "pfr"):
                     if (number(row.get(f"{stat}_points")) or 0) > 0:
                         tree.tk.call(tree, "tag", "cell", "add", "match", (str(i), f"{stat}_match_pct"))
