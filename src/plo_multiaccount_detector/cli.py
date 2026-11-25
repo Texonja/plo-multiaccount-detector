@@ -8,14 +8,15 @@ import sys
 import time
 
 from .hm2_backup import iter_hm2_handhistories
-from .validation import self_test_line, validate
+from .validation import self_test_line, validate_splits
+from .hand_sample import HandSample
 from .grid_prior import fit_grid_priors
 from .likelihood import fit_priors
 from .hh_parser import parse_hand_history
 from .multiaccount import (
     MultiaccountRun,
     add_hand,
-    add_split_hand,
+    build_splits,
     find_candidates,
     load_config,
     write_csv,
@@ -59,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     table_sizes = {int(x) for x in config.get("table_sizes_for_stats", [6, 5])}
 
     run = MultiaccountRun()
-    split = None if args.no_validate else MultiaccountRun()
+    sample = None if args.no_validate else HandSample()
     start = time.time()
     rows_seen = 0
     seen_keys: set[tuple[int, int]] = set()
@@ -75,9 +76,7 @@ def main(argv: list[str] | None = None) -> int:
             seen_keys.add(key)
             try:
                 hand = parse_hand_history(row.handhistory, fallback_hand_id=row.gamenumber)
-                add_hand(run, hand, table_sizes_for_stats=table_sizes)
-                if split is not None:
-                    add_split_hand(split, hand, table_sizes_for_stats=table_sizes)
+                add_hand(run, hand, table_sizes_for_stats=table_sizes, sample=sample)
             except Exception as exc:
                 run.parse_errors += 1
                 if len(run.parse_error_rows) < 1000:
@@ -100,8 +99,8 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     validation_path = out / "validation.json"
     self_test = None
-    if split is not None:
-        result = validate(split, priors, config, grid_prior)
+    if sample is not None:
+        result = validate_splits(build_splits(sample), priors, config, grid_prior, undated=sample.undated)
         validation_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
         self_test = self_test_line(result)
     else:

@@ -1,3 +1,4 @@
+from datetime import datetime
 import itertools
 import sys
 import unittest
@@ -5,12 +6,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from plo_multiaccount_detector.hand_sample import HandSample
 from plo_multiaccount_detector.grid_prior import fit_grid_priors
 from plo_multiaccount_detector.likelihood import fit_priors
-from plo_multiaccount_detector.multiaccount import MultiaccountRun, PlayerProfile, add_split_hand, load_config, score_pair
+from plo_multiaccount_detector.multiaccount import MultiaccountRun, PlayerProfile, add_hand, add_split_hand, build_splits, load_config, score_pair
 from plo_multiaccount_detector.neighbors import NeighborRanks
 from plo_multiaccount_detector.validation import LegacyScores, evaluate, validate
-from test_parser import xml_hand
+from test_parser import action, xml_hand
 
 
 class ValidationTests(unittest.TestCase):
@@ -22,6 +24,21 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual(split.player_stats["A@1"].hands, 2)
         self.assertEqual(split.shared_pair_counts["A@1", "B@1"], 2)
         self.assertTrue(all(a[-1] == b[-1] for a, b in split.shared_pair_counts))
+
+    def test_chronological_sort_uses_timestamp_then_id_and_parity_keeps_undated(self):
+        sample = HandSample()
+        full = MultiaccountRun()
+        for hand_id, day, call in ((6, 1, False), (9, 2, True), (8, 2, False),
+                                   (2, 3, True), (3, None, True)):
+            hand = xml_hand(["", action("A", 3 if call else 0, int(call))], hand_id)
+            hand.timestamp = datetime(2025, 3, day) if day else None
+            add_hand(full, hand, table_sizes_for_stats={5}, sample=sample)
+        splits = build_splits(sample)
+        early, late = (splits["chronological"].player_stats[f"A@{i}"] for i in (0, 1))
+        even, odd = (splits["parity"].player_stats[f"A@{i}"] for i in (0, 1))
+        self.assertEqual((early.hands, early.vpip, late.hands, late.vpip), (2, 0, 2, 2))
+        self.assertEqual((even.hands, even.vpip, odd.hands, odd.vpip), (3, 1, 2, 2))
+        self.assertEqual(sample.undated, 5)
 
     def test_tied_ranks_orphan_and_threshold(self):
         run = MultiaccountRun()

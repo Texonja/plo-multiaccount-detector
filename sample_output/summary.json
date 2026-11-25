@@ -2455,7 +2455,7 @@
   ],
   "eligible_players": 1247,
   "pairs_above_threshold": 3453,
-  "self_test": "Self-test: 39% known twins in the first 100 reported pairs.",
+  "self_test": "Self-test · precision@100 · Chronological 19% / Parity 39%",
   "score_units": "log10 likelihood ratio",
   "config": {
     "table_sizes_for_stats": [

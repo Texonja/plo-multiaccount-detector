@@ -4,9 +4,9 @@ Pairs are ordered by mutual rank, then by descending score.
 
 ## Split-half self-test
 
-Self-test: 39% known twins in the first 100 reported pairs.
+Self-test · precision@100 · Chronological 19% / Parity 39%
 
-Idealized upper bound: same player, same period, no deliberate style change.
+Chronological halves come from different periods of the same account. Parity halves share the same period.
 
 | # | Player A | Player B | Mutual rank | Score (log10 LR) | Mutual hands | A hands | B hands | Min sample | VPIP match | PFR match | 3bet match | WTSD match | WonSD match |
 |---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|

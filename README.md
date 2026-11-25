@@ -35,23 +35,14 @@ The report filters at score 2.0, orders by ascending mutual rank and then descen
 
 ## Split-half self-test
 
-Even and odd hand IDs form two profiles per account. An eligible half competes against all other eligible accounts. Priors are fitted once on the full profiles. This is an idealized upper bound for finding a known twin in the same period without a deliberate style change.
+The primary split orders each account's stat-sample hands by timestamp, breaking ties by hand ID. The first and second halves come from different periods of the same account, with no deliberate style change. Parity splits by even and odd hand IDs within the same period. Hands with missing timestamps remain in parity and the full profile. Priors use the full sample.
 
-The sample contains 1,669 eligible halves, 826 known twins and 1,391,946 unordered pairs. Precision@K is the share of known twins among the first K rows produced by the report pipeline. The self-test applies the score threshold, sorts by ascending mutual rank and descending score, then applies the report cap. Account names break ties. Neighbor ranks are computed from all eligible profiles before filtering.
+The five-stat baseline at score 2.0. Precision uses the filtered and capped report in mutual-rank order.
 
-| Grid score pipeline | Precision@100 | @500 | @1,000 | @1,500 |
-| --- | ---: | ---: | ---: | ---: |
-| 0.8.1 report · score ≥2.5 | 34.0% | 13.4% | 7.4% | 5.3% |
-| 0.8.2 report · score ≥2.0 | 39.0% | 18.0% | 12.1% | 9.0% |
-| Unfiltered · mutual rank | 39.0% | 16.8% | 11.2% | 9.3% |
-| Unfiltered · raw score | 18.0% | 9.2% | 6.1% | 4.9% |
-
-| Score filter | Split pairs passing | Known twins passing | Mutual-rank-1 twins passing |
-| --- | ---: | ---: | ---: |
-| ≥2.5 | 1,845 | 83 / 826 | 31 / 46 |
-| ≥2.0 | 7,838 | 182 / 826 | 44 / 46 |
-
-The score and population prior are the same as in 0.8.1. By raw score, an account's twin appears in its top 10 in 29.2% of cases. The shortlist is for manual review. Establishing a common operator requires separate evidence.
+| Split | Top 1 | Top 10 | Top 50 | Median twin rank | P@100 | P@500 | P@1,000 | Twins passing |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Chronological | 4.1% | 16.1% | 39.8% | 78.5 | 19.0% | 9.0% | 5.8% | 115 / 831 |
+| Parity | 8.5% | 29.2% | 57.9% | 34 | 39.0% | 18.0% | 12.1% | 182 / 826 |
 
 The GUI opens the sample at startup. Desktop analyses write to `reports/`. [Sample shortlist](sample_output/top_candidates.md) · [Full validation and individual ranks](sample_output/validation.json)
 

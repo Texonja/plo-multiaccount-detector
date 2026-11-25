@@ -9,7 +9,7 @@ from .multiaccount import _component_values, eligible_players, sample_points
 
 LIMITS = (100, 500, 1000, 1500)
 BUCKETS = ((50, 150), (150, 500), (500, 1500), (1500, None))
-ASSUMPTION = "Idealized upper bound: same player, same period, no deliberate style change."
+ASSUMPTION = "Known twins come from the same account with no deliberate style change."
 
 
 class LegacyScores:
@@ -150,9 +150,24 @@ def validate(split, priors, config, grid_prior):
     }
 
 
+def validate_splits(splits, priors, config, grid_prior, *, undated=0):
+    result = {"primary_split": "chronological", "undated_player_hands": undated, "splits": {}}
+    for name, split in splits.items():
+        metrics = validate(split, priors, config, grid_prior)
+        if name == "chronological":
+            metrics["split"] = "Per account, first and second halves ordered by timestamp, then hand ID."
+            metrics["assumption"] = f"{ASSUMPTION} Chronological halves come from different periods."
+        else:
+            metrics["assumption"] = f"{ASSUMPTION} Parity halves share the same period."
+        result["splits"][name] = metrics
+    return result
+
+
 def self_test_line(result):
-    report = result["lr"]
-    precision = report["precision_at_k_mutual_rank"]["100"]
-    if precision is None:
-        return f"Self-test: {report['report_pairs']:,} split pairs in the report."
-    return f"Self-test: {precision:.0%} known twins in the first 100 reported pairs."
+    labels = []
+    for name, title in (("chronological", "Chronological"), ("parity", "Parity")):
+        metrics = result["splits"][name]["lr"]
+        precision = metrics["precision_at_k_mutual_rank"]["100"]
+        value = f"{precision:.0%}" if precision is not None else "N/A"
+        labels.append(f"{title} {value}")
+    return f"Self-test · precision@100 · {' / '.join(labels)}"

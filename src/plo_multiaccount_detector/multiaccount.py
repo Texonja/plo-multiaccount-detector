@@ -19,6 +19,7 @@ from typing import Any
 import numpy as np
 
 from .hh_parser import ParsedHand
+from .hand_sample import CORE_FLAGS, HandSample, timestamp_key
 from .grid_prior import GridScores, fit_grid_priors
 from .neighbors import NeighborRanks, ReportShortlist
 from .likelihood import STATS, LikelihoodScores, fit_priors
@@ -187,7 +188,7 @@ def _live_sets(hand: ParsedHand) -> tuple[set[str], set[str]]:
     return saw_flop, showdown if len(showdown) >= 2 else set()
 
 
-def add_hand(run: MultiaccountRun, hand: ParsedHand, *, table_sizes_for_stats: set[int], name_suffix: str = "") -> None:
+def add_hand(run: MultiaccountRun, hand: ParsedHand, *, table_sizes_for_stats: set[int], name_suffix: str = "", sample: HandSample | None = None) -> None:
     run.hands_parsed += 1
     if not name_suffix:
         # Attendance uses all parsed tables, including seats outside the stat sample.
@@ -238,7 +239,12 @@ def add_hand(run: MultiaccountRun, hand: ParsedHand, *, table_sizes_for_stats: s
     saw_flop, showdown_players = _live_sets(hand)
     net = hand.net_by_player()
 
+    increments = (
+        per_player_vpip, per_player_pfr, per_player_3bet, per_player_3bet_opp,
+        saw_flop, showdown_players, {p for p in showdown_players if net.get(p, 0.0) > 0},
+    )
     ts = hand.timestamp.isoformat(sep=" ") if hand.timestamp else ""
+    date_key = timestamp_key(hand.timestamp) if sample is not None else 0
     for p in players:
         ps = run.player_stats[p + name_suffix]
         ps.hands += 1
@@ -246,20 +252,25 @@ def add_hand(run: MultiaccountRun, hand: ParsedHand, *, table_sizes_for_stats: s
             ps.first_seen = ts
         if ts and ts > ps.last_seen:
             ps.last_seen = ts
-        if p in per_player_vpip:
-            ps.vpip += 1
-        if p in per_player_pfr:
-            ps.pfr += 1
-        if p in per_player_3bet_opp:
-            ps.threebet_opportunities += 1
-        if p in per_player_3bet:
-            ps.threebet += 1
-        if p in saw_flop:
-            ps.saw_flop += 1
-        if p in showdown_players:
-            ps.went_to_showdown += 1
-            if net.get(p, 0.0) > 0:
-                ps.won_at_showdown += 1
+        flags = 0
+        for (field, bit), participants in zip(CORE_FLAGS.items(), increments):
+            if p in participants:
+                setattr(ps, field, getattr(ps, field) + 1)
+                flags |= bit
+        if sample is not None:
+            sample.add(p, date_key, hand.hand_id, flags)
+
+
+def build_splits(sample):
+    splits = {name: MultiaccountRun() for name in ("chronological", "parity")}
+    for player in sample.records:
+        for split_name, halves in sample.halves(player).items():
+            for half, flags in enumerate(halves):
+                if not len(flags):
+                    continue
+                fields = {field: int(np.count_nonzero(flags & bit)) for field, bit in CORE_FLAGS.items()}
+                splits[split_name].player_stats[f"{player}@{half}"] = PlayerProfile(hands=len(flags), **fields)
+    return splits
 
 
 def add_split_hand(run, hand, *, table_sizes_for_stats):
@@ -461,7 +472,7 @@ def write_top_markdown(path: Path, rows: list[dict[str, object]], *, top: int = 
     lines.append("")
     if self_test:
         lines.extend(["## Split-half self-test", "", self_test, "",
-                      "Idealized upper bound: same player, same period, no deliberate style change.", ""])
+                      "Chronological halves come from different periods of the same account. Parity halves share the same period.", ""])
     lines.append("| # | Player A | Player B | Mutual rank | Score (log10 LR) | Mutual hands | A hands | B hands | Min sample | VPIP match | PFR match | 3bet match | WTSD match | WonSD match |")
     lines.append("|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for i, r in enumerate(rows[:top], start=1):
