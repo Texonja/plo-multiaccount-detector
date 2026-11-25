@@ -1,6 +1,7 @@
 """Known-twin retrieval on interleaved hand-ID halves."""
 import numpy as np
 
+from .grid_prior import GridScores
 from .neighbors import NeighborRanks
 from .likelihood import LikelihoodScores
 from .multiaccount import _component_values, eligible_players, sample_points
@@ -111,7 +112,7 @@ def evaluate(model, names, profiles, twins, threshold, neighbor_list_size):
     }
 
 
-def validate(split, priors, config):
+def validate(split, priors, config, grid_prior):
     names = eligible_players(split.player_stats, config, split=True)
     positions = {name: i for i, name in enumerate(names)}
     profiles = [split.player_stats[name] for name in names]
@@ -123,7 +124,8 @@ def validate(split, priors, config):
         "precision_at_k_ties": "All eligible pairs, before the score filter. Mutual order uses mutual rank first. Both use descending score, then ascending account names. Null if fewer than K pairs exist.",
         "eligible_accounts": len(names), "known_pairs": sum(j is not None for j in twins) // 2,
         "compared_pairs": len(names) * (len(names) - 1) // 2,
-        "lr": evaluate(LikelihoodScores(profiles, priors), names, profiles, twins, config["min_score_to_report"], size),
+        "lr": evaluate(GridScores(profiles, grid_prior), names, profiles, twins, config["min_score_to_report"], size),
+        "legacy_beta": evaluate(LikelihoodScores(profiles, priors), names, profiles, twins, config["min_score_to_report"], size),
         "legacy": evaluate(LegacyScores(profiles, config), names, profiles, twins, config["min_points_to_report"], size),
     }
 

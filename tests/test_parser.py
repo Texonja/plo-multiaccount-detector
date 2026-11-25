@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from plo_multiaccount_detector.hh_parser import parse_ipoker_xml_hand_history_fast
-from plo_multiaccount_detector.multiaccount import MultiaccountRun, add_hand
+from plo_multiaccount_detector.multiaccount import MultiaccountRun, add_hand, probable_owners
 from plo_multiaccount_detector.pgcopy import pg_copy_unescape
 
 
@@ -50,6 +50,17 @@ class ParserTests(unittest.TestCase):
         for p in "ABCDE":
             self.assertEqual(run.player_stats[p].saw_flop, int(p in "AB"))
             self.assertEqual(run.player_stats[p].went_to_showdown, int(p in "AB"))
+
+    def test_owner_uses_all_parsed_hands_and_strict_majority(self):
+        run = MultiaccountRun()
+        first = xml_hand([])
+        second = xml_hand([], 21)
+        second.seats = {k: v for k, v in second.seats.items() if v.player == "A"}
+        for hand in (first, second):
+            add_hand(run, hand, table_sizes_for_stats={6})
+        self.assertEqual(probable_owners(run), [{"account": "A", "label": "probable database owner",
+                                                 "hands": 2, "fraction_of_parsed_hands": 1.0}])
+        self.assertFalse(run.player_stats)
 
     def test_copy_escaping(self):
         cases = [(None, None), (r"\N", None), ("", ""), (r"\\N", r"\N"),

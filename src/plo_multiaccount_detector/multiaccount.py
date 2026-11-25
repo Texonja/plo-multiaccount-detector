@@ -8,18 +8,19 @@ This module intentionally does not prove multiaccounting. It flags pairs that:
 """
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from itertools import combinations
 import csv
 import heapq
-
-import numpy as np
 import json
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from .hh_parser import ParsedHand
+from .grid_prior import GridScores, fit_grid_priors
 from .neighbors import NeighborRanks
 from .likelihood import STATS, LikelihoodScores, fit_priors
 
@@ -151,6 +152,7 @@ class MultiaccountRun:
     hands_parsed: int = 0
     parse_errors: int = 0
     player_stats: dict[str, PlayerProfile] = field(default_factory=lambda: defaultdict(PlayerProfile))
+    observed_hands: Counter = field(default_factory=Counter)
     shared_pair_counts: dict[tuple[str, str], int] = field(default_factory=lambda: defaultdict(int))
     parse_error_rows: list[dict[str, str]] = field(default_factory=list)
 
@@ -188,6 +190,9 @@ def _live_sets(hand: ParsedHand) -> tuple[set[str], set[str]]:
 
 def add_hand(run: MultiaccountRun, hand: ParsedHand, *, table_sizes_for_stats: set[int], name_suffix: str = "") -> None:
     run.hands_parsed += 1
+    if not name_suffix:
+        # Attendance uses all parsed tables, including seats outside the stat sample.
+        run.observed_hands.update({seat.player for seat in hand.seats.values()})
     players = sorted(hand.active_players)
     if len(players) < 2:
         return
@@ -358,7 +363,7 @@ def score_pair(a: str, b: str, pa: PlayerProfile, pb: PlayerProfile, config: dic
 
 REPORT_COLUMNS = [
     # Identity / review-priority fields
-    "player_a", "player_b", "mutual_rank", "rank_a_to_b", "rank_b_to_a", "score", *(f"{key}_log10_lr" for key, _, _ in STATS),
+    "player_a", "player_b", "mutual_rank", "rank_a_to_b", "rank_b_to_a", "score", "legacy_beta_score", *(f"{key}_log10_lr" for key, _, _ in STATS),
     "legacy_points", "risk_points", "mutual_hands",
     "player_a_sample_hands", "player_b_sample_hands", "min_sample_hands", "sample_points",
 
@@ -396,12 +401,15 @@ def eligible_players(profiles, config, *, split=False):
                       is_generic_player(name[:-2] if split else name)))
 
 
-def find_candidates(run, config, priors=None, *, totals=None):
+def find_candidates(run, config, priors=None, *, grid_prior=None, totals=None):
     if priors is None:
         priors = fit_priors(run.player_stats.values())
     names = eligible_players(run.player_stats, config)
     profiles = [run.player_stats[name] for name in names]
-    model = LikelihoodScores(profiles, priors)
+    if grid_prior is None:
+        grid_prior = fit_grid_priors(run.player_stats.values())
+    model = GridScores(profiles, grid_prior)
+    beta = LikelihoodScores(profiles, priors)
     neighbors = NeighborRanks(model, len(names), int(config["neighbor_list_size"]))
     threshold = float(config["min_score_to_report"])
     cap = int(config["max_candidates"])
@@ -432,6 +440,7 @@ def find_candidates(run, config, priors=None, *, totals=None):
                          mutual_hands=run.shared_pair_counts.get((a, b), 0))
         forward, reverse, mutual = neighbors.pair(i, j)
         row.update(score=round(score, 9), rank_a_to_b=forward, rank_b_to_a=reverse, mutual_rank=mutual)
+        row["legacy_beta_score"] = round(float(beta.row(i, j)), 9)
         row.update({f"{key}_log10_lr": round(float(value), 9)
                     for key, value in model.components(i, j).items()})
         rows.append(row)
@@ -480,7 +489,13 @@ def write_top_markdown(path: Path, rows: list[dict[str, object]], *, top: int = 
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def write_summary(path: Path, *, run: MultiaccountRun, rows: list[dict[str, object]], config: dict[str, Any], input_path: str, priors, totals, self_test=None) -> None:
+def probable_owners(run):
+    return [{"account": name, "label": "probable database owner", "hands": count,
+             "fraction_of_parsed_hands": count / run.hands_parsed}
+            for name, count in sorted(run.observed_hands.items()) if 2 * count > run.hands_parsed]
+
+
+def write_summary(path: Path, *, run: MultiaccountRun, rows: list[dict[str, object]], config: dict[str, Any], input_path: str, priors, grid_prior, totals, self_test=None) -> None:
     summary = {
         "input_path": input_path,
         "hands_parsed": run.hands_parsed,
@@ -488,7 +503,9 @@ def write_summary(path: Path, *, run: MultiaccountRun, rows: list[dict[str, obje
         "unique_players_with_stats_sample": len(run.player_stats),
         "shared_pair_count": len(run.shared_pair_counts),
         "candidate_count": len(rows),
-        "priors": priors,
+        "grid_prior": grid_prior,
+        "legacy_beta_priors": priors,
+        "probable_database_owners": probable_owners(run),
         **totals,
         "self_test": self_test,
         "score_units": "log10 likelihood ratio",

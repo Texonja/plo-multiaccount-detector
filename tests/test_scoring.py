@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from plo_multiaccount_detector.grid_prior import GridScores, fit_grid_priors
 from plo_multiaccount_detector.likelihood import STATS, LikelihoodScores, fit_priors
 from plo_multiaccount_detector.multiaccount import PlayerProfile, load_config, score_pair
 
@@ -24,6 +25,30 @@ class ScoreTests(unittest.TestCase):
     def test_sample_size_and_rarity(self):
         self.assertGreater(vpip_component(20, 100, 20, 100), vpip_component(2, 10, 2, 10))
         self.assertGreater(vpip_component(90, 100, 90, 100), vpip_component(20, 100, 20, 100))
+
+    def test_grid_lr_for_outliers_and_missing_opportunities(self):
+        population = [PlayerProfile(hands=100, vpip=20 + i % 15) for i in range(120)]
+        population += [PlayerProfile(hands=100, vpip=88 + i % 4) for i in range(10)]
+        accounts = [PlayerProfile(hands=100, vpip=89), PlayerProfile(hands=100, vpip=90), PlayerProfile()]
+        prior = fit_grid_priors(population)
+        grid = GridScores(accounts, prior)
+        beta = LikelihoodScores(accounts, fit_priors(population))
+        self.assertEqual(len(prior["theta"]), 400)
+        self.assertAlmostEqual(sum(prior["weights"]["vpip"]), 1)
+        self.assertEqual(float(grid.row(0, 2)), 0)
+        self.assertLess(grid.components(0, 1)["vpip"], beta.components(0, 1)["vpip"])
+        self.assertAlmostEqual(float(grid.row(0, 1)), float(grid.row(1, 0)))
+
+    def test_grid_lr_matches_direct_joint_probability(self):
+        import numpy as np
+        prior = fit_grid_priors([])
+        accounts = [PlayerProfile(hands=2, vpip=1), PlayerProfile(hands=1, vpip=1)]
+        theta = np.asarray(prior["theta"])
+        weights = np.asarray(prior["weights"]["vpip"])
+        first, second = theta * (1 - theta), theta
+        joint = sum(weights * first * second)
+        expected = math.log10(joint / (sum(weights * first) * sum(weights * second)))
+        self.assertAlmostEqual(GridScores(accounts, prior).components(0, 1)["vpip"], expected)
 
     def test_legacy_pair_from_v07_sample(self):
         a = PlayerProfile(hands=93, vpip=57, threebet_opportunities=43, saw_flop=54,

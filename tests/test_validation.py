@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from plo_multiaccount_detector.grid_prior import fit_grid_priors
 from plo_multiaccount_detector.likelihood import fit_priors
 from plo_multiaccount_detector.multiaccount import MultiaccountRun, PlayerProfile, add_split_hand, load_config, score_pair
 from plo_multiaccount_detector.neighbors import NeighborRanks
@@ -27,8 +28,8 @@ class ValidationTests(unittest.TestCase):
             run.player_stats[name] = PlayerProfile(hands=150, vpip=30, pfr=10)
         config = load_config()
         config["min_score_to_report"] = -100
-        result = validate(run, fit_priors([PlayerProfile(hands=12, vpip=4, pfr=1),
-                                           PlayerProfile(hands=10, vpip=7, pfr=2)]), config)
+        full = [PlayerProfile(hands=12, vpip=4, pfr=1), PlayerProfile(hands=10, vpip=7, pfr=2)]
+        result = validate(run, fit_priors(full), config, fit_grid_priors(full))
         self.assertEqual((result["eligible_accounts"], result["known_pairs"], result["compared_pairs"]), (5, 2, 10))
         for method in ("lr", "legacy"):
             stats = result[method]

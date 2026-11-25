@@ -9,6 +9,7 @@ import time
 
 from .hm2_backup import iter_hm2_handhistories
 from .validation import self_test_line, validate
+from .grid_prior import fit_grid_priors
 from .likelihood import fit_priors
 from .hh_parser import parse_hand_history
 from .multiaccount import (
@@ -91,15 +92,16 @@ def main(argv: list[str] | None = None) -> int:
         print("Interrupted. Writing partial report...", file=sys.stderr)
 
     priors = fit_priors(run.player_stats.values())
+    grid_prior = fit_grid_priors(run.player_stats.values())
     totals = {}
-    candidates = find_candidates(run, config, priors, totals=totals)
+    candidates = find_candidates(run, config, priors, grid_prior=grid_prior, totals=totals)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     validation_path = out / "validation.json"
     self_test = None
     if split is not None:
-        result = validate(split, priors, config)
+        result = validate(split, priors, config, grid_prior)
         validation_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
         self_test = self_test_line(result)
     else:
@@ -107,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     write_csv(out / "multiaccount_candidates.csv", candidates)
     write_top_markdown(out / "top_candidates.md", candidates, top=args.top, self_test=self_test)
     write_summary(out / "summary.json", run=run, rows=candidates, config=config, input_path=str(input_path),
-                  priors=priors, totals=totals, self_test=self_test)
+                  priors=priors, grid_prior=grid_prior, totals=totals, self_test=self_test)
     if run.parse_error_rows:
         write_csv_any(out / "parse_errors.csv", run.parse_error_rows)
 

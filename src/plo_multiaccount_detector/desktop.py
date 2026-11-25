@@ -99,6 +99,8 @@ class DetectorWindow:
         label(bar, "PLO", bg=HEADER, size=17, bold=True).pack(side="left")
         tk.Frame(bar, bg="#626768", width=1, height=u(21)).pack(side="left", padx=u(12))
         label(bar, "Multiaccount Detector", bg=HEADER, fg="#d9dcdb", size=13).pack(side="left")
+        self.owner_label = label(bar, bg=HEADER, fg=AMBER, size=9)
+        self.owner_label.pack(side="left", padx=u(12))
         self.filename = label(bar, bg=HEADER, fg="#c4cbcd", size=9)
         self.filename.pack(side="right", padx=u(17))
         rule(self.root, "#111416").pack(fill="x")
@@ -179,8 +181,11 @@ class DetectorWindow:
     def display(self, report):
         self.report = report
         self.source = report.source(ROOT)
-        self.table.set_rows(report.rows)
         info = report.summary
+        owners = [item["account"] for item in info.get("probable_database_owners", [])]
+        self.details.owners = set(owners)
+        self.owner_label.configure(text=", ".join(owners) + " · probable database owner" if owners else "")
+        self.table.set_rows(report.rows)
         name = Path(str(info.get("input_path") or report.path.name)).name
         self.filename.configure(text=("Sample   /   " if report.path == SAMPLE else "") + name)
         self.totals["hands"].configure(text=integer(info.get("hands_parsed")))

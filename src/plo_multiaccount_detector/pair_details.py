@@ -25,6 +25,7 @@ class PairDetails(tk.Frame):
         label(bar, "Pair details", bg=HEADER, size=12, bold=True).pack(side="left", padx=unit(15))
         self.rank = label(bar, bg=HEADER, fg=MUTED, size=9)
         self.rank.pack(side="right", padx=unit(15))
+        self.owners = set()
         self.players = {}
         for key, letter, color in (("a", "A", BLUE), ("b", "B", AMBER)):
             line = tk.Frame(self, bg=PANEL)
@@ -76,7 +77,8 @@ class PairDetails(tk.Frame):
         self.row = row
         self.rank.configure(text=f"Pair #{integer(index+1)}" if row is not None else "")
         for side, (name, hands) in self.players.items():
-            name.configure(text=row[f"player_{side}"] if row else "—")
+            player = row[f"player_{side}"] if row else "—"
+            name.configure(text=player + (" · probable database owner" if player in self.owners else ""))
             hands.configure(text=integer(row.get(f"player_{side}_sample_hands")) + " hands" if row else "")
         self.paint()
 

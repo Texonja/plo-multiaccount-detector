@@ -132,8 +132,8 @@ class CandidateTable(tk.Frame):
             if self.sort_by in ("player_a", "player_b"):
                 return raw.casefold()
             if self.sort_by == "mutual_rank":
-                return (number(raw) or 0, -(number(self.rows[i].get("score")) or 0) if not self.descending
-                        else number(self.rows[i].get("score")) or 0)
+                score = number(self.rows[i].get("score")) or 0
+                return (number(raw) or 0, score if self.descending else -score)
             n = number(raw)
             return n if n is not None else float("-inf")
         self.order.sort(key=value, reverse=self.descending)
