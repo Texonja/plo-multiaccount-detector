@@ -38,7 +38,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "min_score_to_report": 2.0,
     "max_candidates": 2000,
     "neighbor_list_size": 50,
-    "behavior_groups": {"bet_sizing": False},
+    "behavior_groups": dict.fromkeys(GROUPS, False),
     "exclude_generic_ipoker_players": True,
     "points": {
         "vpip": [

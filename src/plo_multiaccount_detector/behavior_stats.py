@@ -14,7 +14,15 @@ SIZING_STATS = tuple(
     )
 ) + (("pot_open", "pot_open", "opens", "Pot-sized open"),)
 
-GROUPS = {"bet_sizing": SIZING_STATS}
+RFI_STATS = tuple((f"rfi_{pos}", f"rfi_{pos}", f"rfi_{pos}_opps", f"{pos.upper()} RFI")
+                  for pos in ("ep", "co", "btn", "sb"))
+FREQUENCY_STATS = (
+    ("flop_cbet", "flop_cbet", "flop_cbet_opps", "Flop c-bet"),
+    ("fold_to_flop_cbet", "fold_to_flop_cbet", "fold_to_flop_cbet_opps", "Fold to flop c-bet"),
+    ("fold_to_3bet", "fold_to_3bet", "fold_to_3bet_opps", "Fold to 3Bet"),
+    ("flop_check_raise", "flop_check_raise", "flop_check_raise_opps", "Flop check-raise"),
+)
+GROUPS = {"bet_sizing": SIZING_STATS, "positional_rfi": RFI_STATS, "postflop_frequency": FREQUENCY_STATS}
 EXTRA_STATS = tuple(stat for group in GROUPS.values() for stat in group)
 EXTRA_FIELDS = tuple(dict.fromkeys(field for _, success, trials, _ in EXTRA_STATS for field in (success, trials)))
 SIZING_EDGES = (.10, .20, .30, .40, .50, .60, .70, .75, .80, .90, 1.0, 1.25, 1.5, 2.0)
@@ -79,9 +87,92 @@ def sizing_events(hand, players, events, histogram):
                     events[player].add(f"{prefix}_large_bet")
 
 
+DECISIONS = {"fold", "check", "call", "bet", "raise"}
+AGGRESSIVE = {"bet", "raise"}
+
+
+def rfi_positions(hand, players):
+    if hand.button_seat not in hand.seats or len(players) < 2:
+        return {}
+    button = hand.seats[hand.button_seat].player
+    if button not in players:
+        return {}
+    if len(players) == 2:
+        return {button: "sb"}
+    seats = sorted(hand.seats.values(), key=lambda seat: (seat.seat_no <= hand.button_seat, seat.seat_no))
+    order = [seat.player for seat in seats if seat.player in players]
+    positions = {order[0]: "sb", order[-1]: "btn"}
+    if len(order) >= 4:
+        positions[order[-2]] = "co"
+        positions.update((player, "ep") for player in order[2:-2])
+    return positions
+
+
+def preflop_frequencies(hand, players, events):
+    positions = rfi_positions(hand, players)
+    voluntary = False
+    raises = 0
+    opener = last_raiser = None
+    for action in hand.actions:
+        if action.street != "PREFLOP":
+            break
+        player, kind = action.player, action.action
+        if player not in players or kind not in DECISIONS:
+            continue
+        position = positions.get(player)
+        if not voluntary and position and kind != "check":
+            events[player].add(f"rfi_{position}_opps")
+            if kind in AGGRESSIVE:
+                events[player].add(f"rfi_{position}")
+        if raises == 2 and player == opener and kind != "check":
+            events[player].add("fold_to_3bet_opps")
+            if kind == "fold":
+                events[player].add("fold_to_3bet")
+        if kind in AGGRESSIVE:
+            if raises == 0:
+                opener = player
+            last_raiser = player
+            raises += 1
+        voluntary |= kind in {"call", "bet", "raise"}
+    return last_raiser
+
+
+def flop_frequencies(hand, players, last_raiser, events):
+    checked = set()
+    bettor = None
+    raised = False
+    for action in hand.actions:
+        if action.street != "FLOP":
+            continue
+        player, kind = action.player, action.action
+        if player not in players or kind not in DECISIONS:
+            continue
+        if bettor is None:
+            if player == last_raiser and kind in {"check", "bet"}:
+                events[player].add("flop_cbet_opps")
+                if kind == "bet":
+                    events[player].add("flop_cbet")
+            if kind == "check":
+                checked.add(player)
+            elif kind == "bet":
+                bettor = player
+        elif not raised and player != bettor and kind in {"fold", "call", "raise"}:
+            if bettor == last_raiser:
+                events[player].add("fold_to_flop_cbet_opps")
+                if kind == "fold":
+                    events[player].add("fold_to_flop_cbet")
+            if player in checked:
+                events[player].add("flop_check_raise_opps")
+                if kind == "raise":
+                    events[player].add("flop_check_raise")
+            raised = kind == "raise"
+
+
 def behavior_events(hand, players, histogram):
     events = defaultdict(set)
     sizing_events(hand, players, events, histogram)
+    last_raiser = preflop_frequencies(hand, players, events)
+    flop_frequencies(hand, players, last_raiser, events)
     return events
 
 
