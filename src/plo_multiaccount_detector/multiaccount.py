@@ -35,10 +35,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "table_sizes_for_stats": [6, 5],
     "min_sample_to_compare": 50,
     "min_points_to_report": 100,
-    "min_score_to_report": 2.0,
+    "min_score_to_report": 2.8,
     "max_candidates": 2000,
     "neighbor_list_size": 50,
-    "behavior_groups": dict.fromkeys(GROUPS, False),
+    "behavior_groups": dict.fromkeys(GROUPS, True),
     "exclude_generic_ipoker_players": True,
     "points": {
         "vpip": [

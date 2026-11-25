@@ -46,6 +46,7 @@ class ValidationTests(unittest.TestCase):
             run.player_stats[name] = PlayerProfile(hands=150, vpip=30, pfr=10)
         config = load_config()
         config["min_score_to_report"] = -100
+        config["behavior_groups"] = {}
         full = [PlayerProfile(hands=12, vpip=4, pfr=1), PlayerProfile(hands=10, vpip=7, pfr=2)]
         result = validate(run, fit_priors(full), config, fit_grid_priors(full))
         self.assertEqual((result["eligible_accounts"], result["known_pairs"], result["compared_pairs"]), (5, 2, 10))

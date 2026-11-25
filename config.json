@@ -2,12 +2,12 @@
   "table_sizes_for_stats": [6, 5],
   "min_sample_to_compare": 50,
   "min_points_to_report": 100,
-  "min_score_to_report": 2.0,
+  "min_score_to_report": 2.8,
   "neighbor_list_size": 50,
   "behavior_groups": {
-    "bet_sizing": false,
-    "positional_rfi": false,
-    "postflop_frequency": false
+    "bet_sizing": true,
+    "positional_rfi": true,
+    "postflop_frequency": true
   },
   "max_candidates": 2000,
   "exclude_generic_ipoker_players": true,
