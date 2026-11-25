@@ -4,7 +4,7 @@ A local desktop tool for reviewing PLO accounts with similar playing profiles.
 
 ## Run on Windows
 
-Extract the Windows ZIP and double-click **PLO-Detector.exe**. It includes Python, Tkinter, NumPy, the backup and the sample report. [Published Windows release (0.8.2)](https://github.com/Texonja/plo-multiaccount-detector/releases/tag/v0.8.2)
+Extract the Windows ZIP and double-click **PLO-Detector.exe**. It includes Python, Tkinter, NumPy, the backup and the sample report. [Published Windows release (0.9)](https://github.com/Texonja/plo-multiaccount-detector/releases/tag/v0.9)
 
 | Ribbon action | What it does |
 | --- | --- |
