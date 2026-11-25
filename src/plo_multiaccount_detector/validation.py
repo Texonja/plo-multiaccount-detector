@@ -1,6 +1,7 @@
 """Known-twin retrieval on interleaved hand-ID halves."""
 import numpy as np
 
+from .neighbors import NeighborRanks
 from .likelihood import LikelihoodScores
 from .multiaccount import _component_values, eligible_players, sample_points
 
@@ -43,11 +44,33 @@ def _rank_summary(records):
     return result
 
 
-def evaluate(model, names, profiles, twins, threshold):
+class PrecisionAtK:
+    """Merge each upper-triangle row into a bounded, stably ordered shortlist."""
+    def __init__(self):
+        self.scores = np.empty(0)
+        self.ranks = np.empty(0, dtype=int)
+        self.labels = np.empty(0, dtype=bool)
+
+    def add(self, scores, labels, ranks=None):
+        pooled = np.concatenate((self.scores, scores))
+        if ranks is None:
+            keep = np.argsort(-pooled, kind="stable")[:max(LIMITS)]
+        else:
+            rank_pool = np.concatenate((self.ranks, ranks))
+            keep = np.lexsort((-pooled, rank_pool))[:max(LIMITS)]
+            self.ranks = rank_pool[keep]
+        self.scores = pooled[keep]
+        self.labels = np.concatenate((self.labels, labels))[keep]
+
+    def result(self):
+        return {str(k): float(self.labels[:k].mean()) if len(self.labels) >= k else None for k in LIMITS}
+
+
+def evaluate(model, names, profiles, twins, threshold, neighbor_list_size):
     ranks = []
     flagged_pairs = true_flagged = 0
-    best_scores = np.empty(0)
-    best_labels = np.empty(0, dtype=bool)
+    neighbors = NeighborRanks(model, len(names), neighbor_list_size)
+    by_score, by_mutual = PrecisionAtK(), PrecisionAtK()
     indexes = np.arange(len(names))
     known_pairs = sum(j is not None for j in twins) // 2
     for i, name in enumerate(names):
@@ -69,10 +92,8 @@ def evaluate(model, names, profiles, twins, threshold):
         flagged = upper >= threshold
         flagged_pairs += int(np.count_nonzero(flagged))
         true_flagged += int(np.count_nonzero(labels & flagged))
-        pooled = np.concatenate([best_scores, upper])
-        keep = np.argsort(-pooled, kind="stable")[:max(LIMITS)]
-        best_scores = pooled[keep]
-        best_labels = np.concatenate([best_labels, labels])[keep]
+        by_score.add(upper, labels)
+        by_mutual.add(upper, labels, neighbors.upper_row(i))
 
     buckets = {}
     for lo, hi in BUCKETS:
@@ -84,8 +105,8 @@ def evaluate(model, names, profiles, twins, threshold):
         "threshold": {"minimum": threshold, "flagged_pairs": flagged_pairs, "true_pairs_flagged": true_flagged,
                       "precision": true_flagged / flagged_pairs if flagged_pairs else None,
                       "recall": true_flagged / known_pairs if known_pairs else None},
-        "precision_at_k": {str(k): float(np.mean(best_labels[:k])) if len(best_labels) >= k else None
-                           for k in LIMITS},
+        "precision_at_k": by_score.result(),
+        "precision_at_k_mutual_rank": by_mutual.result(),
         "twin_ranks": ranks,
     }
 
@@ -95,13 +116,15 @@ def validate(split, priors, config):
     positions = {name: i for i, name in enumerate(names)}
     profiles = [split.player_stats[name] for name in names]
     twins = [positions.get(name[:-1] + ("1" if name[-1] == "0" else "0")) for name in names]
+    size = int(config["neighbor_list_size"])
     return {
+        "neighbor_list_size": size,
         "assumption": ASSUMPTION, "split": "hand_id % 2",
-        "precision_at_k_ties": "Descending score, then ascending account names. Null when fewer than K pairs exist.",
+        "precision_at_k_ties": "All eligible pairs, before the score filter. Mutual order uses mutual rank first. Both use descending score, then ascending account names. Null if fewer than K pairs exist.",
         "eligible_accounts": len(names), "known_pairs": sum(j is not None for j in twins) // 2,
         "compared_pairs": len(names) * (len(names) - 1) // 2,
-        "lr": evaluate(LikelihoodScores(profiles, priors), names, profiles, twins, config["min_score_to_report"]),
-        "legacy": evaluate(LegacyScores(profiles, config), names, profiles, twins, config["min_points_to_report"]),
+        "lr": evaluate(LikelihoodScores(profiles, priors), names, profiles, twins, config["min_score_to_report"], size),
+        "legacy": evaluate(LegacyScores(profiles, config), names, profiles, twins, config["min_points_to_report"], size),
     }
 
 

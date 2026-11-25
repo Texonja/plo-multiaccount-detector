@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from plo_multiaccount_detector.likelihood import fit_priors
 from plo_multiaccount_detector.multiaccount import MultiaccountRun, PlayerProfile, add_split_hand, load_config, score_pair
+from plo_multiaccount_detector.neighbors import NeighborRanks
 from plo_multiaccount_detector.validation import LegacyScores, validate
 from test_parser import xml_hand
 
@@ -36,6 +37,22 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(stats["threshold"]["precision"], .2)
             self.assertEqual(stats["threshold"]["recall"], 1)
             self.assertIsNone(stats["precision_at_k"]["100"])
+
+    def test_mutual_rank_is_symmetric_and_missing_is_k_plus_one(self):
+        import numpy as np
+
+        class Model:
+            def row(self, i, others):
+                rows = [[0, 5, 5, 1], [5, 0, 9, 6], [5, 9, 0, 2], [1, 6, 2, 0]]
+                return np.array(rows[i])[others]
+
+        ranks = NeighborRanks(Model(), 4, 2)
+        self.assertEqual(ranks.pair(0, 1), (1, 3, 3))
+        self.assertEqual(ranks.pair(1, 0), (3, 1, 3))
+        self.assertEqual(ranks.pair(1, 2), (1, 1, 1))
+        for i, j in itertools.combinations(range(4), 2):
+            self.assertEqual(ranks.pair(i, j)[2], ranks.pair(j, i)[2])
+            self.assertEqual(ranks.upper_row(i)[j - i - 1], ranks.pair(i, j)[2])
 
     def test_vector_legacy_matches_csv_calculation(self):
         config = load_config()

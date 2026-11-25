@@ -6,6 +6,7 @@ from .ui_theme import AMBER, INSET, LINE, MUTED, PANEL, SURFACE, TEXT, font, lab
 
 COLUMNS = (
     ("rank", "#", 43), ("player_a", "Player A", 138), ("player_b", "Player B", 138),
+    ("mutual_rank", "Mutual rank", 88), ("rank_a_to_b", "A → B", 62), ("rank_b_to_a", "B → A", 62),
     ("score", "Score", 66), ("mutual_hands", "Shared hands", 101),
     ("min_sample_hands", "Min. hands", 88), ("vpip_match_pct", "VPIP match", 90),
     ("pfr_match_pct", "PFR match", 90),
@@ -101,14 +102,17 @@ class CandidateTable(tk.Frame):
                                    anchor="w" if key in ("player_a", "player_b") else "center")
 
     def sort(self, key):
-        self.descending = not self.descending if key == self.sort_by else key not in ("rank", "player_a", "player_b")
+        self.descending = not self.descending if key == self.sort_by else key not in ("rank", "player_a", "player_b", "mutual_rank", "rank_a_to_b", "rank_b_to_a")
         self.sort_by = key
         self.headings()
         self.populate()
 
     def set_rows(self, rows):
         self.rows = rows
-        self.sort_by, self.descending = "score", True
+        ranked = bool(rows and "mutual_rank" in rows[0])
+        self.sort_by, self.descending = ("mutual_rank", False) if ranked else ("score", True)
+        self.grid_view.configure(displaycolumns=[key for key, _, _ in COLUMNS if ranked or key not in (
+            "mutual_rank", "rank_a_to_b", "rank_b_to_a")])
         self.headings()
         self.grid_view.selection_remove(self.grid_view.selection())
         self.query.set("")
@@ -127,6 +131,9 @@ class CandidateTable(tk.Frame):
                 raw = self.rows[i].get("risk_points")
             if self.sort_by in ("player_a", "player_b"):
                 return raw.casefold()
+            if self.sort_by == "mutual_rank":
+                return (number(raw) or 0, -(number(self.rows[i].get("score")) or 0) if not self.descending
+                        else number(self.rows[i].get("score")) or 0)
             n = number(raw)
             return n if n is not None else float("-inf")
         self.order.sort(key=value, reverse=self.descending)
@@ -135,6 +142,7 @@ class CandidateTable(tk.Frame):
         for index, i in enumerate(self.order):
             row = self.rows[i]
             values = [integer(i+1), row["player_a"], row["player_b"],
+                      *(integer(row.get(key)) for key in ("mutual_rank", "rank_a_to_b", "rank_b_to_a")),
                       decimal(row["score"]) if "score" in row else integer(row.get("risk_points")),
                       integer(row.get("mutual_hands")), integer(row.get("min_sample_hands")),
                       decimal(row.get("vpip_match_pct")), decimal(row.get("pfr_match_pct"))]

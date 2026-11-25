@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from .hh_parser import ParsedHand
+from .neighbors import NeighborRanks
 from .likelihood import STATS, LikelihoodScores, fit_priors
 
 VOLUNTARY_PREFLOP = {"call", "bet", "raise"}
@@ -34,6 +35,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "min_points_to_report": 100,
     "min_score_to_report": 2.5,
     "max_candidates": 2000,
+    "neighbor_list_size": 50,
     "exclude_generic_ipoker_players": True,
     "points": {
         "vpip": [
@@ -356,7 +358,7 @@ def score_pair(a: str, b: str, pa: PlayerProfile, pb: PlayerProfile, config: dic
 
 REPORT_COLUMNS = [
     # Identity / review-priority fields
-    "player_a", "player_b", "score", *(f"{key}_log10_lr" for key, _, _ in STATS),
+    "player_a", "player_b", "mutual_rank", "rank_a_to_b", "rank_b_to_a", "score", *(f"{key}_log10_lr" for key, _, _ in STATS),
     "legacy_points", "risk_points", "mutual_hands",
     "player_a_sample_hands", "player_b_sample_hands", "min_sample_hands", "sample_points",
 
@@ -400,6 +402,7 @@ def find_candidates(run, config, priors=None, *, totals=None):
     names = eligible_players(run.player_stats, config)
     profiles = [run.player_stats[name] for name in names]
     model = LikelihoodScores(profiles, priors)
+    neighbors = NeighborRanks(model, len(names), int(config["neighbor_list_size"]))
     threshold = float(config["min_score_to_report"])
     cap = int(config["max_candidates"])
     if cap < 0:
@@ -413,7 +416,8 @@ def find_candidates(run, config, priors=None, *, totals=None):
         for offset in hits:
             j = i + 1 + int(offset)
             # Equal scores are ordered by player names in ascending order.
-            entry = float(scores[offset]), -i, -j
+            mutual = neighbors.pair(i, j)[2]
+            entry = -mutual, float(scores[offset]), -i, -j
             if len(best) < cap:
                 heapq.heappush(best, entry)
             elif best and entry > best[0]:
@@ -421,12 +425,13 @@ def find_candidates(run, config, priors=None, *, totals=None):
     if totals is not None:
         totals.update(eligible_players=len(names), pairs_above_threshold=flagged)
     rows = []
-    for score, neg_i, neg_j in sorted(best, reverse=True):
+    for _, score, neg_i, neg_j in sorted(best, reverse=True):
         i, j = -neg_i, -neg_j
         a, b = names[i], names[j]
         row = score_pair(a, b, profiles[i], profiles[j], config,
                          mutual_hands=run.shared_pair_counts.get((a, b), 0))
-        row.update(score=round(score, 9))
+        forward, reverse, mutual = neighbors.pair(i, j)
+        row.update(score=round(score, 9), rank_a_to_b=forward, rank_b_to_a=reverse, mutual_rank=mutual)
         row.update({f"{key}_log10_lr": round(float(value), 9)
                     for key, value in model.components(i, j).items()})
         rows.append(row)
@@ -459,16 +464,16 @@ def write_top_markdown(path: Path, rows: list[dict[str, object]], *, top: int = 
     lines: list[str] = []
     lines.append("# PLO candidate pairs")
     lines.append("")
-    lines.append("Pairs are ranked for manual review by playing-profile similarity and sample size.")
+    lines.append("Pairs are ordered by mutual rank, then by descending score.")
     lines.append("")
     if self_test:
         lines.extend(["## Split-half self-test", "", self_test, "",
                       "Idealized upper bound: same player, same period, no deliberate style change.", ""])
-    lines.append("| # | Player A | Player B | Score (log10 LR) | Mutual hands | A hands | B hands | Min sample | VPIP match | PFR match | 3bet match | WTSD match | WonSD match |")
-    lines.append("|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    lines.append("| # | Player A | Player B | Mutual rank | Score (log10 LR) | Mutual hands | A hands | B hands | Min sample | VPIP match | PFR match | 3bet match | WTSD match | WonSD match |")
+    lines.append("|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for i, r in enumerate(rows[:top], start=1):
         lines.append(
-            f"| {i} | {r['player_a']} | {r['player_b']} | {r['score']:.3f} | {r['mutual_hands']} | "
+            f"| {i} | {r['player_a']} | {r['player_b']} | {r['mutual_rank']} | {r['score']:.3f} | {r['mutual_hands']} | "
             f"{r['player_a_sample_hands']} | {r['player_b_sample_hands']} | {r['min_sample_hands']} | "
             f"{r['vpip_match_pct']} | {r['pfr_match_pct']} | {r['threebet_match_pct']} | {r['wtsd_match_pct']} | {r['wonsd_match_pct']} |"
         )
