@@ -1,23 +1,23 @@
-# PLO Multiaccount Detector 0.8
+# PLO Multiaccount Detector 0.8.1
 
 A local desktop tool for reviewing PLO accounts with similar playing profiles.
 
 ## Run on Windows
 
-Extract the **0.8 Windows x64 ZIP**, then double-click **PLO-Detector.exe**. The runtime, Tkinter, NumPy, backup and sample report are included. The [published 0.7 release](https://github.com/Texonja/plo-multiaccount-detector/releases/tag/v0.7) uses the earlier points-based report.
+Download and extract the ZIP, then double-click **PLO-Detector.exe**. It includes Python, Tkinter, NumPy, the backup and the sample report. [Download for Windows x64](https://github.com/Texonja/plo-multiaccount-detector/releases/download/v0.8.1/PLO-Detector-0.8.1-Windows-x64.zip)
 
 | Ribbon action | What it does |
 | --- | --- |
 | Open backup | Analyze an HM2 `.pghembk` backup or SQL dump. |
 | Analyze | Rebuild the report from the current backup using `config.json`. |
-| Open report | Open a candidate CSV, including a 0.7 report. Keep its original `summary.json` alongside it for database totals. |
+| Open report | Open a candidate CSV, including 0.7 and 0.8 reports. Keep its original `summary.json` alongside it for database totals. |
 | Export CSV | Save visible pairs in the current order with all report columns. |
 
 Select a pair to see its playing profiles. **Scoring** shows how each stat contributes to the total. Click a heading to sort, **Ctrl+F** to find a player and **Esc** to clear the search.
 
 ## Scoring
 
-The score compares two explanations for the counts observed in each stat. In the first, both accounts have the same underlying frequency. In the second, each account has a frequency drawn independently from the player population. The detector fits a beta distribution for each stat by maximum likelihood on all full-run profiles, including small samples. The fitted parameters are in `summary.json`.
+The score compares two explanations for the counts observed in each stat. In the first, both accounts have the same underlying frequency. In the second, each account has a frequency drawn independently from the player population. For each stat, the detector estimates how common 400 possible playing frequencies are between 0.0025 and 0.9975. It fits these weights to all full-run profiles with 300 expectation-maximization steps. After each step it smooths the grid with a Gaussian kernel (three grid steps of standard deviation) and normalizes it. The grid can capture several common playing styles. The fitted weights are in `summary.json` under `grid_prior`.
 
 | Stat | Successes / opportunities |
 | --- | --- |
@@ -29,31 +29,40 @@ The score compares two explanations for the counts observed in each stat. In the
 
 The five contributions add on a base-10 log scale. A contribution of +1 gives the shared-frequency explanation ten times as much weight for that stat. Negative values favor separate frequencies. A player with zero opportunities contributes exactly zero to that comparison. Conditioning PFR on VPIP reduces the overlap between the two preflop measures. Other correlations and changes in opponents or stakes can still affect the total. **The score ranks similarity. It does not give the probability of a shared identity.**
 
-By default the detector uses 5- and 6-handed play, requires 50 hands per account and excludes generic iPoker seat names. A threshold of **2.5** produces **1,753 pairs** from 1,247 eligible players in the 150,000-hand sample. The **2,000-row cap** keeps larger reports practical. Both values are configurable. Shared hands across table sizes and first/last observation dates are available for review and carry zero weight. The CSV retains 0.7 per-stat points, the sample adjustment and the old total in `legacy_points` and `risk_points`.
+The report uses 5- and 6-handed play and requires 50 hands per account by default. Each eligible player gets a list of their 50 closest neighbors by score. **Mutual rank** is the worse of the two directional ranks. A missing direction receives 51. A mutual rank of 1 means each is the other's closest match. `neighbor_list_size` controls the list length. Ties within a list use the account name.
+
+The report filters at score 2.5, orders by ascending mutual rank and then descending score, and keeps up to 2,000 pairs. The sample returns **923 pairs** from 1,247 eligible players. Shared hands and dates provide review context. Any account seated in more than half of all parsed hands is labeled **probable database owner** and retains its normal eligibility. The CSV includes the previous Beta score in `legacy_beta_score` for comparison, alongside the earlier points columns.
 
 ## Split-half self-test
 
-Each parsed hand also feeds an even- or odd-hand-ID profile. Two halves of the same account have zero shared hands and form a known pair. Each half competes against every other eligible account, including accounts whose own twin is too small. Both methods use the same split. The LR uses priors fitted on the unsplit profiles. This is an **idealized upper bound** for retrieval under favorable conditions: same player, same period, no deliberate style change.
+Even and odd hand IDs form two profiles per account. An eligible half competes against all other eligible accounts. Priors are fitted once on the full profiles. This is an idealized upper bound for finding a known twin in the same period without a deliberate style change.
 
-The sample has 1,669 eligible split accounts, 826 known pairs and 1,391,946 unordered comparisons. Hit rates use the 1,652 accounts with an eligible twin. Ranges give the two possible ends of a tie. Precision@K uses descending score and breaks ties by account names.
+The sample contains 1,669 eligible halves, 826 known pairs and 1,391,946 unordered pairs. Top-10 measures where each account's own twin ranks by raw score. Precision@K measures how many of the first K **pairs across the entire split** are twins, before applying the report threshold. Equal ordering keys are resolved by account name.
 
-| Parser | Score | Twin in top 1 | Twin in top 10 | Twin in top 50 | Median twin rank | Precision@100 |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| 0.7 | Legacy points | 2.6–3.1% | 8.5–11.0% | 22.6–27.7% | 209–298.5 | 14% |
-| 0.7 | LR | 8.5% | 28.6% | 57.1% | 37 | 14% |
-| 0.8 | Legacy points | 2.8–3.5% | 8.1–10.4% | 22.5–27.8% | 209–299 | 9% |
-| 0.8 | LR | 8.4% | 28.9% | 57.8% | 36.5 | 13% |
+| Version / prior | Pair ordering | Precision@100 | @500 | @1,000 | @1,500 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 0.8 · Beta | score | 13.0% | 7.8% | 4.7% | 3.8% |
+| 0.8.1 · Beta | score | 13.0% | 7.8% | 4.7% | 3.8% |
+| 0.8.1 · Beta | mutual rank | 38.0% | 16.2% | 11.2% | 8.7% |
+| 0.8.1 · Grid | score | 18.0% | 9.2% | 6.1% | 4.9% |
+| 0.8.1 · Grid | mutual rank | 39.0% | 16.8% | 11.2% | 9.3% |
 
-| Hands in smaller half | Accounts | Twin in LR top 10 with 0.7 parser | With 0.8 parser |
+| Version / prior | Twin in top 10 | Median twin rank | Split pairs scoring ≥2.5 | Known twins flagged | Precision | Recall |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.8 · Beta | 28.9% | 36.5 | 4,015 | 98 | 2.4% | 11.9% |
+| 0.8.1 · Beta | 29.0% | 36.5 | 4,014 | 97 | 2.4% | 11.7% |
+| 0.8.1 · Grid | 29.2% | 34 | 1,845 | 83 | 4.5% | 10.0% |
+
+| Hands in smaller half | Accounts | 0.8 twin in top 10 | 0.8.1 twin in top 10 |
 | --- | ---: | ---: | ---: |
-| 50–149 | 992 | 13.7% | 14.8% |
-| 150–499 | 456 | 43.2% | 42.1% |
-| 500–1,499 | 150 | 60.0% | 61.3% |
-| 1,500+ | 54 | 90.7% | 87.0% |
+| 50–149 | 992 | 14.8% | 15.1% |
+| 150–499 | 456 | 42.1% | 42.5% |
+| 500–1,499 | 150 | 61.3% | 61.3% |
+| 1,500+ | 54 | 87.0% | 85.2% |
 
-At the 0.8 report threshold, LR flags 4,015 split pairs, including 98 known twins (2.44% precision, 11.86% recall). Legacy scoring flags 2,294 at 100 points, including 47 twins (2.05% precision, 5.69% recall). These counts use every qualifying pair before the display cap. Just 13 of the first 100 LR pairs are twins. Five aggregate statistics leave many distinct accounts with similar profiles. Establishing a common operator requires independent evidence.
+Correcting the parser alone preserved all 100 pairs in the previous top 100. With the grid, the former first pair, **P4nd4Drift / falcon_mirror**, moves to report position **64**. Its 3Bet contribution falls from **4.61** to **1.33**. Even in this controlled test, only 39 of the first 100 pairs are known twins. Establishing a common operator requires separate evidence.
 
-The [sample report](sample_output/top_candidates.md) gives the shortlist. [Validation results](sample_output/validation.json) include individual twin ranks, sample-size groups, threshold metrics and precision at 100, 500, 1,000 and 1,500 pairs. A complete run took 67.8 seconds on Windows x64 with CPython 3.14.8 and NumPy 2.5.3. Desktop analyses write new reports under `reports/`. The GUI opens the bundled sample at startup.
+The GUI opens the sample at startup. Desktop analyses write to `reports/`. [Sample shortlist](sample_output/top_candidates.md) · [Full validation and individual ranks](sample_output/validation.json)
 
 ## iPoker parser and sample audit
 
@@ -82,5 +91,5 @@ To build the portable ZIP using 64-bit python.org Python on Windows with Tcl/Tk 
 
 ```powershell
 python -m pip install -r requirements.txt distlib==0.4.2
-python tools/build_windows.py PLO-Detector-0.8-Windows-x64.zip
+python tools/build_windows.py PLO-Detector-0.8.1-Windows-x64.zip
 ```
