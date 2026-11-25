@@ -14,8 +14,8 @@ STATS = [
 
 
 def _counts(profiles, success, trials):
-    x = np.array([getattr(p, success) for p in profiles], dtype=np.int64)
-    n = np.array([getattr(p, trials) for p in profiles], dtype=np.int64)
+    x = np.array([p.stat_count(success) for p in profiles], dtype=np.int64)
+    n = np.array([p.stat_count(trials) for p in profiles], dtype=np.int64)
     if np.any((x < 0) | (x > n)):
         raise ValueError(f"Invalid binomial counts for {success}/{trials}")
     return x, n

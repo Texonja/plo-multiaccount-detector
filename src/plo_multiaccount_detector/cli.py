@@ -10,6 +10,7 @@ import time
 from .hm2_backup import iter_hm2_handhistories
 from .validation import self_test_line, validate_splits
 from .hand_sample import HandSample
+from .behavior_stats import stat_specs
 from .grid_prior import fit_grid_priors
 from .likelihood import fit_priors
 from .hh_parser import parse_hand_history
@@ -91,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Interrupted. Writing partial report...", file=sys.stderr)
 
     priors = fit_priors(run.player_stats.values())
-    grid_prior = fit_grid_priors(run.player_stats.values())
+    grid_prior = fit_grid_priors(run.player_stats.values(), stat_specs())
     totals = {}
     candidates = find_candidates(run, config, priors, grid_prior=grid_prior, totals=totals)
 

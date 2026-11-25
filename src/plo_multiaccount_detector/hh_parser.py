@@ -45,6 +45,7 @@ class Action:
     amount: float = 0.0
     to_amount: float | None = None
     raw: str = ""
+    all_in: bool = False
 
 
 @dataclass
@@ -301,17 +302,17 @@ def parse_text_hand_history(raw_text: str, *, fallback_hand_id: int | None = Non
                 elif verb == "calls":
                     amount = _money_first(line) or 0.0
                     _add_amount(hand.contributions, player, amount)
-                    hand.actions.append(Action(player, current_street, "call", amount=amount, raw=line))
+                    hand.actions.append(Action(player, current_street, "call", amount=amount, raw=line, all_in="all-in" in line.lower()))
                 elif verb == "bets":
                     amount = _money_first(line) or 0.0
                     _add_amount(hand.contributions, player, amount)
-                    hand.actions.append(Action(player, current_street, "bet", amount=amount, raw=line))
+                    hand.actions.append(Action(player, current_street, "bet", amount=amount, raw=line, all_in="all-in" in line.lower()))
                 elif verb == "raises":
                     amounts = MONEY_RE.findall(line)
                     amount = float(amounts[0]) if amounts else 0.0
                     to_amount = float(amounts[1]) if len(amounts) > 1 else None
                     _add_amount(hand.contributions, player, amount)
-                    hand.actions.append(Action(player, current_street, "raise", amount=amount, to_amount=to_amount, raw=line))
+                    hand.actions.append(Action(player, current_street, "raise", amount=amount, to_amount=to_amount, raw=line, all_in="all-in" in line.lower()))
 
     if not hand.table_name:
         hand.table_name = "UNKNOWN"
@@ -438,7 +439,7 @@ def parse_ipoker_xml_hand_history_fast(raw_text: str, *, fallback_hand_id: int |
                         elif outstanding == 0 and street != "PREFLOP":
                             kind = "bet"
                     delta = total - prev if typ == "23" else amount_raw
-                    hand.actions.append(Action(player, street, kind, amount=delta, to_amount=total, raw=raw))
+                    hand.actions.append(Action(player, street, kind, amount=delta, to_amount=total, raw=raw, all_in=typ == "7"))
                     street_contrib[player] = total
                 else:
                     hand.actions.append(Action(player, street, f"unknown_{typ}", amount=amount_raw, raw=raw))

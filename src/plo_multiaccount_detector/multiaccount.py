@@ -19,7 +19,8 @@ from typing import Any
 import numpy as np
 
 from .hh_parser import ParsedHand
-from .hand_sample import CORE_FLAGS, HandSample, timestamp_key
+from .hand_sample import CORE_FLAGS, EXTRA_FLAGS, HandSample, timestamp_key
+from .behavior_stats import EXTRA_STATS, GROUPS, behavior_events, sizing_distribution, stat_specs
 from .grid_prior import GridScores, fit_grid_priors
 from .neighbors import NeighborRanks, ReportShortlist
 from .likelihood import STATS, LikelihoodScores, fit_priors
@@ -37,6 +38,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "min_score_to_report": 2.0,
     "max_candidates": 2000,
     "neighbor_list_size": 50,
+    "behavior_groups": {"bet_sizing": False},
     "exclude_generic_ipoker_players": True,
     "points": {
         "vpip": [
@@ -126,6 +128,12 @@ class PlayerProfile:
     won_at_showdown: int = 0
     first_seen: str = ""
     last_seen: str = ""
+    behavior: dict[str, int] = field(default_factory=dict)
+
+    def stat_count(self, field_name):
+        if field_name == "hands" or field_name in CORE_FLAGS:
+            return getattr(self, field_name)
+        return self.behavior.get(field_name, 0)
 
     def vpip_pct(self) -> float:
         return pct(self.vpip, self.hands)
@@ -152,6 +160,7 @@ class MultiaccountRun:
     hands_parsed: int = 0
     parse_errors: int = 0
     player_stats: dict[str, PlayerProfile] = field(default_factory=lambda: defaultdict(PlayerProfile))
+    sizing_histogram: dict[str, Counter] = field(default_factory=lambda: defaultdict(Counter))
     observed_hands: Counter = field(default_factory=Counter)
     shared_pair_counts: dict[tuple[str, str], int] = field(default_factory=lambda: defaultdict(int))
     parse_error_rows: list[dict[str, str]] = field(default_factory=list)
@@ -243,6 +252,7 @@ def add_hand(run: MultiaccountRun, hand: ParsedHand, *, table_sizes_for_stats: s
         per_player_vpip, per_player_pfr, per_player_3bet, per_player_3bet_opp,
         saw_flop, showdown_players, {p for p in showdown_players if net.get(p, 0.0) > 0},
     )
+    behavior = behavior_events(hand, set(players), run.sizing_histogram)
     ts = hand.timestamp.isoformat(sep=" ") if hand.timestamp else ""
     date_key = timestamp_key(hand.timestamp) if sample is not None else 0
     for p in players:
@@ -257,6 +267,9 @@ def add_hand(run: MultiaccountRun, hand: ParsedHand, *, table_sizes_for_stats: s
             if p in participants:
                 setattr(ps, field, getattr(ps, field) + 1)
                 flags |= bit
+        for field_name in behavior.get(p, ()):
+            ps.behavior[field_name] = ps.behavior.get(field_name, 0) + 1
+            flags |= EXTRA_FLAGS[field_name]
         if sample is not None:
             sample.add(p, date_key, hand.hand_id, flags)
 
@@ -269,7 +282,12 @@ def build_splits(sample):
                 if not len(flags):
                     continue
                 fields = {field: int(np.count_nonzero(flags & bit)) for field, bit in CORE_FLAGS.items()}
-                splits[split_name].player_stats[f"{player}@{half}"] = PlayerProfile(hands=len(flags), **fields)
+                present = int(np.bitwise_or.reduce(flags))
+                behavior = {field: int(np.count_nonzero(flags & bit))
+                            for field, bit in EXTRA_FLAGS.items() if present & bit}
+                splits[split_name].player_stats[f"{player}@{half}"] = PlayerProfile(
+                    hands=len(flags), behavior=behavior, **fields
+                )
     return splits
 
 
@@ -371,6 +389,12 @@ def score_pair(a: str, b: str, pa: PlayerProfile, pb: PlayerProfile, config: dic
     return row
 
 
+BEHAVIOR_COLUMNS = [
+    "active_behavior_groups",
+    *(column for key, _, _, _ in EXTRA_STATS
+      for column in (f"player_a_{key}", f"player_b_{key}",
+                     f"player_a_{key}_opportunities", f"player_b_{key}_opportunities", f"{key}_log10_lr")),
+]
 REPORT_COLUMNS = [
     # Identity / review-priority fields
     "player_a", "player_b", "mutual_rank", "rank_a_to_b", "rank_b_to_a", "score", "legacy_beta_score", *(f"{key}_log10_lr" for key, _, _ in STATS),
@@ -400,6 +424,7 @@ REPORT_COLUMNS = [
 
     # Observed date range
     "player_a_first_seen", "player_a_last_seen", "player_b_first_seen", "player_b_last_seen",
+    *BEHAVIOR_COLUMNS,
 ]
 
 
@@ -416,9 +441,12 @@ def find_candidates(run, config, priors=None, *, grid_prior=None, totals=None):
         priors = fit_priors(run.player_stats.values())
     names = eligible_players(run.player_stats, config)
     profiles = [run.player_stats[name] for name in names]
+    groups = config["behavior_groups"]
+    active_stats = stat_specs(groups)
+    report_stats = stat_specs()
     if grid_prior is None:
-        grid_prior = fit_grid_priors(run.player_stats.values())
-    model = GridScores(profiles, grid_prior)
+        grid_prior = fit_grid_priors(run.player_stats.values(), report_stats)
+    model = GridScores(profiles, grid_prior, active_stats, report_stats=report_stats)
     beta = LikelihoodScores(profiles, priors)
     neighbors = NeighborRanks(model, len(names), int(config["neighbor_list_size"]))
     shortlist = ReportShortlist(float(config["min_score_to_report"]), int(config["max_candidates"]))
@@ -437,7 +465,13 @@ def find_candidates(run, config, priors=None, *, grid_prior=None, totals=None):
         row.update(score=round(score, 9), rank_a_to_b=forward, rank_b_to_a=reverse, mutual_rank=mutual)
         row["legacy_beta_score"] = round(float(beta.row(i, j)), 9)
         row.update({f"{key}_log10_lr": round(float(value), 9)
-                    for key, value in model.components(i, j).items()})
+                    for key, value in model.components(i, j, include_report_stats=True).items()})
+        row["active_behavior_groups"] = ",".join(group for group in GROUPS if groups.get(group))
+        for side, profile in (("a", profiles[i]), ("b", profiles[j])):
+            for key, successes, trials, _ in EXTRA_STATS:
+                n = profile.stat_count(trials)
+                row[f"player_{side}_{key}"] = round(pct(profile.stat_count(successes), n), 2) if n else ""
+                row[f"player_{side}_{key}_opportunities"] = n
         rows.append(row)
     return rows
 
@@ -499,6 +533,8 @@ def write_summary(path: Path, *, run: MultiaccountRun, rows: list[dict[str, obje
         "shared_pair_count": len(run.shared_pair_counts),
         "candidate_count": len(rows),
         "grid_prior": grid_prior,
+        "bet_sizing_distribution": sizing_distribution(run.sizing_histogram),
+        "active_stats": [key for key, _, _ in stat_specs(config["behavior_groups"])],
         "legacy_beta_priors": priors,
         "probable_database_owners": probable_owners(run),
         **totals,

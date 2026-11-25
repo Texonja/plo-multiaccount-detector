@@ -3,12 +3,15 @@ from array import array
 
 import numpy as np
 
+from .behavior_stats import EXTRA_FIELDS
+
 
 CORE_FIELDS = (
     "vpip", "pfr", "threebet", "threebet_opportunities",
     "saw_flop", "went_to_showdown", "won_at_showdown",
 )
 CORE_FLAGS = {field: 1 << index for index, field in enumerate(CORE_FIELDS)}
+EXTRA_FLAGS = {field: 1 << index for index, field in enumerate(EXTRA_FIELDS, len(CORE_FIELDS))}
 
 
 class HandSample:

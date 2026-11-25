@@ -34,18 +34,19 @@ def _fit_weights(x, n):
     return weights
 
 
-def fit_grid_priors(profiles):
+def fit_grid_priors(profiles, stats=STATS):
     profiles = list(profiles)
     return {
         "theta": GRID.tolist(), "iterations": ITERATIONS, "sigma_steps": SIGMA,
-        "weights": {key: _fit_weights(*_counts(profiles, x, n)).tolist() for key, x, n in STATS},
+        "weights": {key: _fit_weights(*_counts(profiles, x, n)).tolist() for key, x, n in stats},
     }
 
 
 class GridScores:
-    def __init__(self, profiles, prior):
+    def __init__(self, profiles, prior, stats=STATS, *, report_stats=None):
+        self.active_keys = [key for key, _, _ in stats]
         self.terms = {}
-        for key, success, trials in STATS:
+        for key, success, trials in stats if report_stats is None else report_stats:
             x, n = _counts(profiles, success, trials)
             weights = np.asarray(prior["weights"][key])
             log_l = _scaled_log_likelihood(x, n)
@@ -55,9 +56,11 @@ class GridScores:
             vectors = np.exp(log_l + .5 * log_g - marginal[:, None])
             self.terms[key] = vectors, n
 
-    def components(self, i, others):
+    def components(self, i, others, *, include_report_stats=False):
         result = {}
-        for key, (vectors, n) in self.terms.items():
+        keys = self.terms if include_report_stats else self.active_keys
+        for key in keys:
+            vectors, n = self.terms[key]
             odds = np.einsum("...k,k->...", vectors[others], vectors[i])
             value = np.log10(np.maximum(odds, np.finfo(float).tiny))
             result[key] = np.where((n[i] == 0) | (n[others] == 0), 0.0, value)
