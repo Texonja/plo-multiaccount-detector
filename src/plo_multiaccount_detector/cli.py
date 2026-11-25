@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 import json
 from pathlib import Path
-import re
 import sys
 import time
 
 from .hm2_backup import iter_hm2_handhistories
+from .hand_histories import ArchiveCounts, iter_archive_hands
 from .validation import self_test_line, validate_splits
 from .hand_sample import HandSample
 from .behavior_stats import stat_specs
@@ -32,12 +33,12 @@ def build_parser() -> argparse.ArgumentParser:
         prog="plo-multiaccount-detector",
         description="HM2-focused PLO multiaccount / ghost-player candidate detector.",
     )
-    p.add_argument("--input", required=True, help="HM2 .pghembk backup or plain HM2 PostgreSQL .sql dump")
+    p.add_argument("--input", required=True, help="HM2 backup, SQL dump or folder of iPoker XML hand histories (including subfolders)")
     p.add_argument("--out", required=True, help="Output directory")
     p.add_argument("--config", default=None, help="Config JSON path")
     p.add_argument("--max-hands", type=int, default=None, help="Quick test limit")
     p.add_argument("--site-id", type=int, default=4, help="HM2 pokersite_id; 4 is iPoker in the supplied backup")
-    p.add_argument("--contains", default="Omaha PL", help="Fast raw hand-history substring filter")
+    p.add_argument("--contains", default="Omaha PL", help="Substring in the backup hand history or the XML session game type")
     p.add_argument("--top", type=int, default=100, help="Rows in Markdown summary")
     p.add_argument("--no-validate", action="store_true", help="Skip split-half self-test")
     p.add_argument("--no-dedupe", action="store_true", help="Do not deduplicate by site+gamenumber")
@@ -49,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     input_path = Path(args.input)
     if not input_path.exists():
-        print(f"Input file not found: {input_path}", file=sys.stderr)
+        print(f"Input not found: {input_path}", file=sys.stderr)
         return 2
 
     config_path = args.config
@@ -65,23 +66,37 @@ def main(argv: list[str] | None = None) -> int:
     start = time.time()
     rows_seen = 0
     seen_keys: set[tuple[int, int]] = set()
+    archive = ArchiveCounts() if input_path.is_dir() else None
+
+    def record_error(source, message):
+        if len(run.parse_error_rows) < 1000:
+            run.parse_error_rows.append({"hand_id": source, "error": message[:500]})
+
+    options = dict(max_hands=args.max_hands, raw_handhistory_contains=args.contains)
+    if archive is not None:
+        input_path = input_path.resolve()
+        rows = iter_archive_hands(input_path, counts=archive, on_error=record_error, **options)
+    else:
+        rows = iter_hm2_handhistories(input_path, **options)
 
     try:
-        for row in iter_hm2_handhistories(input_path, max_hands=args.max_hands, raw_handhistory_contains=args.contains):
+        for row in rows:
             rows_seen += 1
             if args.site_id is not None and row.pokersite_id != args.site_id:
                 continue
             key = (row.pokersite_id, row.gamenumber)
             if not args.no_dedupe and key in seen_keys:
+                if archive is not None:
+                    archive.duplicates += 1
                 continue
-            seen_keys.add(key)
             try:
                 hand = parse_hand_history(row.handhistory, fallback_hand_id=row.gamenumber)
                 add_hand(run, hand, table_sizes_for_stats=table_sizes, sample=sample)
+                if not args.no_dedupe:
+                    seen_keys.add(key)
             except Exception as exc:
                 run.parse_errors += 1
-                if len(run.parse_error_rows) < 1000:
-                    run.parse_error_rows.append({"hand_id": str(row.gamenumber or row.handhistory_id), "error": str(exc)[:500]})
+                record_error(str(row.gamenumber or row.filename or row.handhistory_id), str(exc))
 
             if args.progress_every and rows_seen % args.progress_every == 0:
                 print(
@@ -91,9 +106,14 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("Interrupted. Writing partial report...", file=sys.stderr)
 
+    if archive is not None and not run.hands_parsed:
+        print(f"No matching iPoker hands found. XML files checked: {archive.xml_files}. "
+              f"Read errors: {archive.read_errors}. Hand errors: {run.parse_errors}.", file=sys.stderr)
+        return 2
+
     priors = fit_priors(run.player_stats.values())
     grid_prior = fit_grid_priors(run.player_stats.values(), stat_specs())
-    totals = {}
+    totals = {"hand_history_import": asdict(archive)} if archive is not None else {}
     candidates = find_candidates(run, config, priors, grid_prior=grid_prior, totals=totals)
 
     out = Path(args.out)
@@ -112,6 +132,8 @@ def main(argv: list[str] | None = None) -> int:
                   priors=priors, grid_prior=grid_prior, totals=totals, self_test=self_test)
     if run.parse_error_rows:
         write_csv_any(out / "parse_errors.csv", run.parse_error_rows)
+    else:
+        (out / "parse_errors.csv").unlink(missing_ok=True)
 
     print(f"Done. Parsed {run.hands_parsed:,} hands. Candidates: {len(candidates):,}. Output: {out.resolve()}")
     return 0

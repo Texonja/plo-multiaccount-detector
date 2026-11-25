@@ -24,6 +24,7 @@ from .behavior_stats import EXTRA_STATS, GROUPS, behavior_events, sizing_distrib
 from .grid_prior import GridScores, fit_grid_priors
 from .neighbors import NeighborRanks, ReportShortlist
 from .likelihood import STATS, LikelihoodScores, fit_priors
+from .score_units import POINTS_PER_LOG10_LR
 
 VOLUNTARY_PREFLOP = {"call", "bet", "raise"}
 PFR_ACTIONS = {"bet", "raise"}
@@ -35,7 +36,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "table_sizes_for_stats": [6, 5],
     "min_sample_to_compare": 50,
     "min_points_to_report": 100,
-    "min_score_to_report": 2.8,
+    "min_score_points_to_report": 28,
     "max_candidates": 2000,
     "neighbor_list_size": 50,
     "behavior_groups": dict.fromkeys(GROUPS, True),
@@ -113,7 +114,11 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
     p = Path(path)
     if not p.exists():
         return json.loads(json.dumps(DEFAULT_CONFIG))
-    return deep_merge(DEFAULT_CONFIG, json.loads(p.read_text(encoding="utf-8")))
+    settings = json.loads(p.read_text(encoding="utf-8"))
+    if "min_score_to_report" in settings:
+        old_threshold = settings.pop("min_score_to_report")
+        settings.setdefault("min_score_points_to_report", float(old_threshold) * POINTS_PER_LOG10_LR)
+    return deep_merge(DEFAULT_CONFIG, settings)
 
 
 @dataclass
@@ -397,7 +402,7 @@ BEHAVIOR_COLUMNS = [
 ]
 REPORT_COLUMNS = [
     # Identity / review-priority fields
-    "player_a", "player_b", "mutual_rank", "rank_a_to_b", "rank_b_to_a", "score", "legacy_beta_score", *(f"{key}_log10_lr" for key, _, _ in STATS),
+    "player_a", "player_b", "mutual_rank", "rank_a_to_b", "rank_b_to_a", "score", "score_log10_lr", "legacy_beta_score", *(f"{key}_log10_lr" for key, _, _ in STATS),
     "legacy_points", "risk_points", "mutual_hands",
     "player_a_sample_hands", "player_b_sample_hands", "min_sample_hands", "sample_points",
 
@@ -449,7 +454,7 @@ def find_candidates(run, config, priors=None, *, grid_prior=None, totals=None):
     model = GridScores(profiles, grid_prior, active_stats, report_stats=report_stats)
     beta = LikelihoodScores(profiles, priors)
     neighbors = NeighborRanks(model, len(names), int(config["neighbor_list_size"]))
-    shortlist = ReportShortlist(float(config["min_score_to_report"]), int(config["max_candidates"]))
+    shortlist = ReportShortlist(float(config["min_score_points_to_report"]), int(config["max_candidates"]))
     flagged = 0
     for i in range(len(names) - 1):
         scores = model.row(i, slice(i + 1, None))
@@ -462,7 +467,8 @@ def find_candidates(run, config, priors=None, *, grid_prior=None, totals=None):
         row = score_pair(a, b, profiles[i], profiles[j], config,
                          mutual_hands=run.shared_pair_counts.get((a, b), 0))
         forward, reverse, mutual = neighbors.pair(i, j)
-        row.update(score=round(score, 9), rank_a_to_b=forward, rank_b_to_a=reverse, mutual_rank=mutual)
+        row.update(score=round(score, 9), score_log10_lr=round(score / POINTS_PER_LOG10_LR, 9),
+                   rank_a_to_b=forward, rank_b_to_a=reverse, mutual_rank=mutual)
         row["legacy_beta_score"] = round(float(beta.row(i, j)), 9)
         row.update({f"{key}_log10_lr": round(float(value), 9)
                     for key, value in model.components(i, j, include_report_stats=True).items()})
@@ -507,11 +513,11 @@ def write_top_markdown(path: Path, rows: list[dict[str, object]], *, top: int = 
     if self_test:
         lines.extend(["## Split-half self-test", "", self_test, "",
                       "Chronological halves come from different periods of the same account. Parity halves share the same period.", ""])
-    lines.append("| # | Player A | Player B | Mutual rank | Score (log10 LR) | Mutual hands | A hands | B hands | Min sample | VPIP match | PFR match | 3bet match | WTSD match | WonSD match |")
+    lines.append("| # | Player A | Player B | Mutual rank | Score | Mutual hands | A hands | B hands | Min sample | VPIP match | PFR match | 3bet match | WTSD match | WonSD match |")
     lines.append("|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for i, r in enumerate(rows[:top], start=1):
         lines.append(
-            f"| {i} | {r['player_a']} | {r['player_b']} | {r['mutual_rank']} | {r['score']:.3f} | {r['mutual_hands']} | "
+            f"| {i} | {r['player_a']} | {r['player_b']} | {r['mutual_rank']} | {r['score']:.1f} | {r['mutual_hands']} | "
             f"{r['player_a_sample_hands']} | {r['player_b_sample_hands']} | {r['min_sample_hands']} | "
             f"{r['vpip_match_pct']} | {r['pfr_match_pct']} | {r['threebet_match_pct']} | {r['wtsd_match_pct']} | {r['wonsd_match_pct']} |"
         )
@@ -539,7 +545,7 @@ def write_summary(path: Path, *, run: MultiaccountRun, rows: list[dict[str, obje
         "probable_database_owners": probable_owners(run),
         **totals,
         "self_test": self_test,
-        "score_units": "log10 likelihood ratio",
+        "score_units": f"{POINTS_PER_LOG10_LR} × log10 likelihood ratio",
         "config": config,
     }
     path.parent.mkdir(parents=True, exist_ok=True)

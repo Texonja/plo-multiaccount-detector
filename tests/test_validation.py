@@ -45,7 +45,7 @@ class ValidationTests(unittest.TestCase):
         for name in ("A@0", "A@1", "B@0", "B@1", "orphan@0", "Player 3@0"):
             run.player_stats[name] = PlayerProfile(hands=150, vpip=30, pfr=10)
         config = load_config()
-        config["min_score_to_report"] = -100
+        config["min_score_points_to_report"] = -1000
         config["behavior_groups"] = {}
         full = [PlayerProfile(hands=12, vpip=4, pfr=1), PlayerProfile(hands=10, vpip=7, pfr=2)]
         result = validate(run, fit_priors(full), config, fit_grid_priors(full))

@@ -2,6 +2,7 @@
 import math
 
 import numpy as np
+from .score_units import POINTS_PER_LOG10_LR
 
 
 STATS = [
@@ -105,4 +106,4 @@ class LikelihoodScores:
         return result
 
     def row(self, i, others):
-        return sum(self.components(i, others).values())
+        return POINTS_PER_LOG10_LR * sum(self.components(i, others).values())

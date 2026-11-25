@@ -13,6 +13,8 @@ from distlib.scripts import ScriptMaker
 
 PROJECT = Path(__file__).resolve().parents[1]
 PYTHON = Path(sys.base_prefix)
+sys.path.insert(0, str(PROJECT / "src"))
+from plo_multiaccount_detector import __version__
 
 
 def copy_runtime(runtime):
@@ -54,7 +56,7 @@ def copy_runtime(runtime):
 def build(output):
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=output.parent) as temp:
-        staging = Path(temp) / "portable"
+        staging = Path(temp) / f"PLO-Detector-{__version__}"
         staging.mkdir()
         copy_runtime(staging / "runtime")
         shutil.copytree(PROJECT / "src", staging / "src", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
@@ -70,9 +72,10 @@ def build(output):
         shutil.copy2(license_file, staging / "runtime" / "distlib-LICENSE.txt")
         archive_path = Path(temp) / "portable.zip"
         with ZipFile(archive_path, "w", compression=ZIP_DEFLATED) as archive:
+            archive.write(staging, staging.name)
             for path in sorted(staging.rglob("*")):
                 if path.is_file():
-                    archive.write(path, path.relative_to(staging))
+                    archive.write(path, path.relative_to(staging.parent))
         archive_path.replace(output)
 
 

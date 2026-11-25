@@ -145,8 +145,8 @@ def validate(split, priors, config, grid_prior):
         "precision_at_k_ties": "Break ties by ascending account names. Each result is null if fewer than K pairs are available.",
         "eligible_accounts": len(names), "known_pairs": sum(j is not None for j in twins) // 2,
         "compared_pairs": len(names) * (len(names) - 1) // 2,
-        "lr": evaluate(GridScores(profiles, grid_prior, stat_specs(config["behavior_groups"])), names, profiles, twins, float(config["min_score_to_report"]), size, cap),
-        "legacy_beta": evaluate(LikelihoodScores(profiles, priors), names, profiles, twins, float(config["min_score_to_report"]), size, cap),
+        "lr": evaluate(GridScores(profiles, grid_prior, stat_specs(config["behavior_groups"])), names, profiles, twins, float(config["min_score_points_to_report"]), size, cap),
+        "legacy_beta": evaluate(LikelihoodScores(profiles, priors), names, profiles, twins, float(config["min_score_points_to_report"]), size, cap),
         "legacy": evaluate(LegacyScores(profiles, config), names, profiles, twins, float(config["min_points_to_report"]), size, cap),
     }
 

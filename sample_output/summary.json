@@ -8580,7 +8580,7 @@
   "eligible_players": 1247,
   "pairs_above_threshold": 4793,
   "self_test": "Self-test · precision@100 · Chronological 60% / Parity 93%",
-  "score_units": "log10 likelihood ratio",
+  "score_units": "10 × log10 likelihood ratio",
   "config": {
     "table_sizes_for_stats": [
       6,
@@ -8588,7 +8588,7 @@
     ],
     "min_sample_to_compare": 50,
     "min_points_to_report": 100,
-    "min_score_to_report": 2.8,
+    "min_score_points_to_report": 28,
     "max_candidates": 2000,
     "neighbor_list_size": 50,
     "behavior_groups": {

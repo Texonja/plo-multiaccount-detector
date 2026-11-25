@@ -1,5 +1,6 @@
 import math
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -7,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from plo_multiaccount_detector.grid_prior import GridScores, fit_grid_priors
 from plo_multiaccount_detector.likelihood import STATS, LikelihoodScores, fit_priors
 from plo_multiaccount_detector.multiaccount import PlayerProfile, load_config, score_pair
+from plo_multiaccount_detector.report_view import Report, export_rows
 
 
 def vpip_component(x, n, y, m):
@@ -16,6 +18,27 @@ def vpip_component(x, n, y, m):
 
 
 class ScoreTests(unittest.TestCase):
+    def test_old_config_and_score_csv_convert_once(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            config = folder / "config.json"
+            config.write_text('{"min_score_to_report": 3.5}', encoding="utf-8")
+            self.assertEqual(load_config(config)["min_score_points_to_report"], 35)
+            self.assertEqual(load_config()["min_score_points_to_report"], 28)
+            old = folder / "old.csv"
+            old.write_text("player_a,player_b,score,legacy_beta_score,vpip_match_pct\n"
+                           "A,B,12.45,4.2,94.5\n", encoding="utf-8")
+            report = Report.read(old)
+            row = report.rows[0]
+            self.assertEqual((row["score"], row["score_log10_lr"], row["legacy_beta_score"]),
+                             ("124.5", "12.45", "42.0"))
+            self.assertEqual(row["vpip_match_pct"], "94.5")
+            target = folder / "export.csv"
+            export_rows(report, [0], target)
+            self.assertEqual(Report.read(target).rows, report.rows)
+            old.write_text("player_a,player_b,risk_points\nA,B,80\n", encoding="utf-8")
+            self.assertEqual(Report.read(old).rows[0]["risk_points"], "80")
+
     def test_zero_trials_and_symmetry(self):
         self.assertEqual(vpip_component(0, 0, 5, 20), 0.0)
         self.assertEqual(vpip_component(1, 4, 8, 9), vpip_component(8, 9, 1, 4))
@@ -48,7 +71,9 @@ class ScoreTests(unittest.TestCase):
         first, second = theta * (1 - theta), theta
         joint = sum(weights * first * second)
         expected = math.log10(joint / (sum(weights * first) * sum(weights * second)))
-        self.assertAlmostEqual(GridScores(accounts, prior).components(0, 1)["vpip"], expected)
+        model = GridScores(accounts, prior)
+        self.assertAlmostEqual(model.components(0, 1)["vpip"], expected)
+        self.assertAlmostEqual(model.row(0, 1), 10 * sum(model.components(0, 1).values()))
 
     def test_legacy_pair_from_v07_sample(self):
         a = PlayerProfile(hands=93, vpip=57, threebet_opportunities=43, saw_flop=54,

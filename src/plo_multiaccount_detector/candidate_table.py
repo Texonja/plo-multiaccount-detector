@@ -143,7 +143,7 @@ class CandidateTable(tk.Frame):
             row = self.rows[i]
             values = [integer(i+1), row["player_a"], row["player_b"],
                       *(integer(row.get(key)) for key in ("mutual_rank", "rank_a_to_b", "rank_b_to_a")),
-                      decimal(row["score"]) if "score" in row else integer(row.get("risk_points")),
+                      decimal(row["score"], 1) if "score" in row else integer(row.get("risk_points")),
                       integer(row.get("mutual_hands")), integer(row.get("min_sample_hands")),
                       decimal(row.get("vpip_match_pct")), decimal(row.get("pfr_match_pct"))]
             tree.insert("", "end", iid=str(i), values=values, tags=("even" if index % 2 else "odd",))

@@ -348,7 +348,7 @@ def parse_ipoker_xml_hand_history_fast(raw_text: str, *, fallback_hand_id: int |
     would need fragment repair anyway. This parser extracts only the fields the
     detector needs.
     """
-    m_game = re.search(r'<game\s+gamecode="(\d+)"', raw_text)
+    m_game = re.search(r'<game\s+[^>]*?\bgamecode="(\d+)"', raw_text)
     if not m_game:
         raise HandParseError("iPoker XML has no gamecode")
     hand_id = int(m_game.group(1) or fallback_hand_id or 0)

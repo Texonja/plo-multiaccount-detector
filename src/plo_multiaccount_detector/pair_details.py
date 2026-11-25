@@ -4,6 +4,7 @@ from tkinter import ttk
 
 from .behavior_stats import EXTRA_STATS, GROUPS
 from .report_view import STATS, decimal, integer, number
+from .score_units import POINTS_PER_LOG10_LR
 from .ui_theme import AMBER, BLUE, HEADER, INSET, LINE, MUTED, PANEL, TEXT, font, label, rule
 
 
@@ -175,7 +176,7 @@ class PairDetails(tk.Frame):
         left, right = 16, width-16
         if "score" in self.row:
             self.text(left, 22, "Stat", color=MUTED)
-            self.text(right, 22, "log10 LR", color=MUTED, anchor="e")
+            self.text(right, 22, "Score contribution", color=MUTED, anchor="e")
             self.line(left, 38, right, 38)
             active_groups = (self.row.get("active_behavior_groups") or "").split(",")
             stats = [("pfr_given_vpip", "PFR | VPIP") if key == "pfr" else (key, name)
@@ -185,12 +186,13 @@ class PairDetails(tk.Frame):
             for i, (key, name) in enumerate(stats):
                 y = 57 + i * 33
                 self.text(left, y, name, bold=True)
-                self.text(right, y, decimal(self.row.get(f"{key}_log10_lr")), anchor="e")
+                raw = number(self.row.get(f"{key}_log10_lr"))
+                self.text(right, y, decimal(raw * POINTS_PER_LOG10_LR, 1) if raw is not None else "—", anchor="e")
                 self.line(left, y + 16, right, y + 16)
             total_y = 81 + len(stats) * 33
             self.rect(left - 5, total_y - 21, right + 5, total_y + 21, INSET)
             self.text(left + 3, total_y, "Total score", bold=True)
-            self.text(right - 4, total_y, decimal(self.row["score"]), color=AMBER, size=14, bold=True, anchor="e")
+            self.text(right - 4, total_y, decimal(self.row["score"], 1), color=AMBER, size=14, bold=True, anchor="e")
             return total_y + 36
         match, diff = left+(right-left)*.5, left+(right-left)*.77
         for x, title in ((left, "Stat"), (match, "Match"), (diff, "Rel. diff."), (right, "Points")):

@@ -95,7 +95,7 @@
           }
         },
         "threshold": {
-          "minimum": 2.8,
+          "minimum": 28.0,
           "flagged_pairs": 10830,
           "true_pairs_flagged": 335,
           "precision": 0.030932594644506,
@@ -11840,7 +11840,7 @@
           }
         },
         "threshold": {
-          "minimum": 2.8,
+          "minimum": 28.0,
           "flagged_pairs": 1843,
           "true_pairs_flagged": 34,
           "precision": 0.018448182311448725,
@@ -35345,7 +35345,7 @@
           }
         },
         "threshold": {
-          "minimum": 2.8,
+          "minimum": 28.0,
           "flagged_pairs": 11291,
           "true_pairs_flagged": 461,
           "precision": 0.040828978832698606,
@@ -47020,7 +47020,7 @@
           }
         },
         "threshold": {
-          "minimum": 2.8,
+          "minimum": 28.0,
           "flagged_pairs": 1920,
           "true_pairs_flagged": 67,
           "precision": 0.034895833333333334,

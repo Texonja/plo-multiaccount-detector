@@ -17,31 +17,12 @@ from tkinter import filedialog, messagebox
 from . import __version__
 from .candidate_table import CandidateTable
 from .pair_details import PairDetails
-from .report_view import CSV_NAME, Report, integer
+from .report_view import CSV_NAME, Report, export_rows, integer
 from .ui_theme import AMBER, EDGE, HEADER, INK, LINE, MUTED, PANEL, SILVER, TEXT, font, label, rule, style_grid
 
 ASSETS = Path(__file__).with_name("assets")
 ROOT = Path(__file__).resolve().parents[2]
 SAMPLE = ROOT / "sample_output" / CSV_NAME
-
-
-def export_rows(report, order, target):
-    if target.resolve() == report.path.resolve():
-        raise ValueError("Choose a different filename for the export.")
-    with report.path.open(encoding="utf-8-sig", newline="") as source:
-        fields = next(csv.reader(source))
-    temp = None
-    try:
-        with tempfile.NamedTemporaryFile(mode="w", dir=target.parent, delete=False,
-                                         encoding="utf-8-sig", newline="") as stream:
-            temp = Path(stream.name)
-            writer = csv.DictWriter(stream, fieldnames=fields)
-            writer.writeheader()
-            writer.writerows(report.rows[i] for i in order)
-        temp.replace(target)
-    finally:
-        if temp is not None:
-            temp.unlink(missing_ok=True)
 
 
 class DetectorWindow:
@@ -65,6 +46,7 @@ class DetectorWindow:
         style_grid(root, u)
         self.images = {key: tk.PhotoImage(file=ASSETS / (key + ".png"))
                        for key in ("cards", "database", "run", "folder", "export")}
+        self.images["histories"] = self.images["folder"]
         if os.name == "nt":
             root.iconbitmap(str(ASSETS / "detector.ico"))
         self.header()
@@ -85,7 +67,7 @@ class DetectorWindow:
         if SAMPLE.is_file():
             self.load(SAMPLE)
         else:
-            self.message.set("Open a backup or CSV report.")
+            self.message.set("Open a backup, hand histories or a CSV report.")
 
     def unit(self, n):
         return round(n*self.scale)
@@ -113,7 +95,9 @@ class DetectorWindow:
         ribbon = tk.Frame(outer, bg=SILVER)
         ribbon.pack(fill="x", padx=u(9), pady=(u(4), u(3)))
         actions = (
-            ("Database", (("database", "Open backup", self.open_backup), ("run", "Analyze", self.analyze))),
+            ("Database", (("database", "Open backup", self.open_backup),
+                          ("histories", "Open hand histories", self.open_hand_histories),
+                          ("run", "Analyze", self.analyze))),
             ("Reports", (("folder", "Open report", self.open_report), ("export", "Export CSV", self.export))),
         )
         for caption, group in actions:
@@ -186,7 +170,9 @@ class DetectorWindow:
         self.details.owners = set(owners)
         self.owner_label.configure(text=", ".join(owners) + " · probable database owner" if owners else "")
         self.table.set_rows(report.rows)
-        name = Path(str(info.get("input_path") or report.path.name)).name
+        path = Path(str(info.get("input_path") or report.path.name))
+        archive = info.get("hand_history_import")
+        name = str(Path(path.parent.name) / path.name) if archive else path.name
         self.filename.configure(text=("Sample   /   " if report.path == SAMPLE else "") + name)
         self.totals["hands"].configure(text=integer(info.get("hands_parsed")))
         self.totals["players"].configure(text=integer(info.get("unique_players_with_stats_sample")))
@@ -194,7 +180,10 @@ class DetectorWindow:
         config = info.get("config") or {}
         sizes = config.get("table_sizes_for_stats") if isinstance(config, dict) else None
         self.table_sizes.configure(text="  /  ".join(f"{s}-max" for s in sizes) if isinstance(sizes,list) else "")
-        self.message.set(info.get("self_test") or "Ready")
+        status = info.get("self_test") or "Ready"
+        if archive and (archive["read_errors"] or info.get("parse_errors")):
+            status += f" · {archive['read_errors']} read errors, {info.get('parse_errors', 0)} hand errors (parse_errors.csv)"
+        self.message.set(status)
 
     def open_report(self):
         path = filedialog.askopenfilename(parent=self.root, title="Open report",
@@ -210,10 +199,16 @@ class DetectorWindow:
             self.start_analysis(Path(path))
 
     def analyze(self):
-        if self.source and self.source.is_file():
+        if self.source and self.source.exists():
             self.start_analysis(self.source)
         else:
             self.open_backup()
+
+    def open_hand_histories(self):
+        options = {"initialdir": self.source} if self.source and self.source.is_dir() else {}
+        path = filedialog.askdirectory(parent=self.root, title="Open hand histories", mustexist=True, **options)
+        if path:
+            self.start_analysis(Path(path))
 
     def export(self):
         if self.report is None:
@@ -287,7 +282,6 @@ class DetectorWindow:
             stage.rename(dest)
             report.path = dest / CSV_NAME
             self.display(report)
-            self.message.set(report.summary.get("self_test") or "Analysis complete")
         except (OSError, ValueError, csv.Error) as exc:
             self.message.set("Analysis failed")
             messagebox.showerror("Analysis", str(exc), parent=self.root)

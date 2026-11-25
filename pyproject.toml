@@ -1,6 +1,6 @@
 [project]
 name = "plo-multiaccount-detector"
-version = "0.9"
+version = "0.9.1"
 description = "HM2-focused PLO multiaccount / ghost-player candidate detector"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.23"]

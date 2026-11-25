@@ -2,6 +2,7 @@
 import numpy as np
 
 from .likelihood import STATS, _counts
+from .score_units import POINTS_PER_LOG10_LR
 
 
 GRID = np.linspace(.0025, .9975, 400)
@@ -67,4 +68,4 @@ class GridScores:
         return result
 
     def row(self, i, others):
-        return sum(self.components(i, others).values())
+        return POINTS_PER_LOG10_LR * sum(self.components(i, others).values())
