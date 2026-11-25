@@ -24,12 +24,18 @@ class ParserTests(unittest.TestCase):
         pre = action("C", 23, 3) + action("A", 7, 2.5) + action("B", 23, 8)
         hand = xml_hand([blinds, pre])
         self.assertEqual([(a.action, a.amount, a.to_amount) for a in hand.actions[2:]],
-                         [("raise", 3, 3), ("call", 2.5, 3), ("raise", 8, 9)])
+                         [("raise", 3, 3), ("call", 2.5, 3), ("raise", 7, 8)])
         run = MultiaccountRun()
         add_hand(run, hand, table_sizes_for_stats={5})
         self.assertEqual(run.player_stats["A"].pfr, 0)
         self.assertEqual(run.player_stats["B"].threebet_opportunities, 1)
         self.assertEqual(run.player_stats["B"].threebet, 1)
+
+    def test_raise_to_carries_blinds_and_never_removes_chips(self):
+        hand = xml_hand([action("A", 2, 1),
+                         action("A", 23, 4) + action("A", 23, 3) + action("B", 7, 4)])
+        self.assertEqual([(a.action, a.amount, a.to_amount) for a in hand.actions[1:]],
+                         [("raise", 3, 4), ("raise", 0, 4), ("call", 4, 4)])
 
     def test_all_in_bet_raise_and_short_call(self):
         flop = action("A", 7, 3) + action("B", 7, 8) + action("C", 7, 2)

@@ -1,4 +1,4 @@
-"""Reconcile the v0.8 iPoker amount rule against player bet attributes in an HM2 backup."""
+"""Reconcile parsed iPoker action amounts against player bet attributes in an HM2 backup."""
 import argparse
 from collections import Counter, defaultdict
 import json
@@ -21,6 +21,7 @@ def audit(path):
         h = parse_ipoker_xml_hand_history_fast(row.handhistory)
         totals = [Counter() for _ in range(3)]
         streets = [defaultdict(Counter) for _ in totals]
+        parsed = Counter()
         calls = 0
         for action in h.actions:
             typ = re.search(r'type="(\d+)"', action.raw)[1]
@@ -28,15 +29,16 @@ def audit(path):
                 continue
             cents = round(parse_money(re.search(r'sum="([^"]*)"', action.raw)[1]) * 100)
             name = action.player
+            parsed[name] += round(action.amount * 100)
             calls += int(typ == "7" and action.street == "PREFLOP" and action.action == "call")
             for method in range(3):
                 # 0: both incremental. 1: type 23 is a street total.
                 # 2: same as 1, with any excess big blind posted as dead money.
                 bets = streets[method][action.street]
-                if method == 1 and typ == "7" and action.street == "PREFLOP":
+                if method == 0 and typ == "7" and action.street == "PREFLOP":
                     call = bets[name] + cents <= max(bets.values(), default=0)
                     counts["preflop_all_in_labels_changed_by_raise_to"] += call != (action.action == "call")
-                delta = cents - bets[name] if method and typ == "23" else cents
+                delta = max(0, cents - bets[name]) if method and typ == "23" else cents
                 totals[method][name] += delta
                 bets[name] += min(delta, round(100 * h.big_blind)) if method == 2 and typ == "2" else delta
         counts["hands"] += 1
@@ -48,6 +50,7 @@ def audit(path):
         for name in h.active_players:
             counts["player_hands"] += 1
             declared = round(100 * h.contributions.get(name, 0))
+            counts["parsed_amount_matches"] += parsed[name] == declared
             for key, values in zip(("both_incremental", "raise_to", "raise_to_with_dead_blind"), totals):
                 counts[key + "_matches"] += values[name] == declared
             excess = totals[0][name] - declared

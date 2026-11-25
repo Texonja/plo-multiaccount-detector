@@ -57,11 +57,9 @@ The [sample report](sample_output/top_candidates.md) gives the shortlist. [Valid
 
 ## iPoker parser and sample audit
 
-Version 0.8 carries blind contributions into preflop and classifies a type 7 all-in by the live street maximum. Under the specified incremental rule, 1,282 preflop all-ins in 1,185 hands become calls. The board establishes flop participation even when a deal runs out with no flop action. The sample contains 1,709 such hands, including 1,538 at the configured table sizes.
+Type 23 is a raise to the stated street total. A raise to 1.75 from a posted blind of 0.50 adds 1.25. Type 7 adds its full amount to the previous contribution. Its new street total determines whether the action calls, bets or raises. Blinds carry into preflop. A dealt flop counts even when the board runs out without further betting.
 
-**Amount convention.** This version implements the requested incremental `sum` for both types 7 and 23. Against the XML player `bet` field, that rule reconciles 727,280 of 769,435 player-hands (94.52%). In 16,394 of the 42,155 mismatches the difference equals the unmatched wager on the street. That coincidence alone cannot establish a returned bet. Reading type 23 as a raise **to** a street total while keeping type 7 incremental reconciles 769,270 player-hands (99.98%). Treating the part of an oversized big-blind post above one big blind as dead money brings that to 769,412. The remaining 23 records do not reconcile under that convention.
-
-For example, in hand 9000000024 the big blind posts 0.50, raises with `sum=1.75`, and bets 1.87 on the flop. The recorded `bet=3.62` agrees with a preflop street total of 1.75. The incremental reading gives 4.12. On this sample, the two type 23 interpretations yield different call/raise labels for 68 preflop all-ins. Reproduce the reconciliation on the supplied backup with `python tools/audit_ipoker.py database.pghembk`.
+On the sample, parsed action amounts reconcile with the XML player `bet` in 769,270 of 769,435 player-hands (99.98%). Version 0.8 reconciled 727,280 (94.52%). Reproduce the check with `python tools/audit_ipoker.py database.pghembk`.
 
 ## Run from source
 

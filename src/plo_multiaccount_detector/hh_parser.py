@@ -429,7 +429,7 @@ def parse_ipoker_xml_hand_history_fast(raw_text: str, *, fallback_hand_id: int |
                     street_contrib[player] = street_contrib.get(player, 0.0) + amount_raw
                 elif typ in {"7", "23"}:
                     prev = street_contrib.get(player, 0.0)
-                    total = prev + amount_raw
+                    total = max(prev, amount_raw) if typ == "23" else prev + amount_raw
                     kind = "raise"
                     if typ == "7":
                         outstanding = max(street_contrib.values(), default=0.0)
@@ -437,7 +437,8 @@ def parse_ipoker_xml_hand_history_fast(raw_text: str, *, fallback_hand_id: int |
                             kind = "call"
                         elif outstanding == 0 and street != "PREFLOP":
                             kind = "bet"
-                    hand.actions.append(Action(player, street, kind, amount=amount_raw, to_amount=total, raw=raw))
+                    delta = total - prev if typ == "23" else amount_raw
+                    hand.actions.append(Action(player, street, kind, amount=delta, to_amount=total, raw=raw))
                     street_contrib[player] = total
                 else:
                     hand.actions.append(Action(player, street, f"unknown_{typ}", amount=amount_raw, raw=raw))
