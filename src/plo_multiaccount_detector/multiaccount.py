@@ -12,7 +12,6 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from itertools import combinations
 import csv
-import heapq
 import json
 from pathlib import Path
 from typing import Any
@@ -21,7 +20,7 @@ import numpy as np
 
 from .hh_parser import ParsedHand
 from .grid_prior import GridScores, fit_grid_priors
-from .neighbors import NeighborRanks
+from .neighbors import NeighborRanks, ReportShortlist
 from .likelihood import STATS, LikelihoodScores, fit_priors
 
 VOLUNTARY_PREFLOP = {"call", "bet", "raise"}
@@ -34,7 +33,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "table_sizes_for_stats": [6, 5],
     "min_sample_to_compare": 50,
     "min_points_to_report": 100,
-    "min_score_to_report": 2.5,
+    "min_score_to_report": 2.0,
     "max_candidates": 2000,
     "neighbor_list_size": 50,
     "exclude_generic_ipoker_players": True,
@@ -411,30 +410,15 @@ def find_candidates(run, config, priors=None, *, grid_prior=None, totals=None):
     model = GridScores(profiles, grid_prior)
     beta = LikelihoodScores(profiles, priors)
     neighbors = NeighborRanks(model, len(names), int(config["neighbor_list_size"]))
-    threshold = float(config["min_score_to_report"])
-    cap = int(config["max_candidates"])
-    if cap < 0:
-        raise ValueError("max_candidates must be nonnegative")
-    best = []
+    shortlist = ReportShortlist(float(config["min_score_to_report"]), int(config["max_candidates"]))
     flagged = 0
     for i in range(len(names) - 1):
         scores = model.row(i, slice(i + 1, None))
-        hits = np.flatnonzero(scores >= threshold)
-        flagged += len(hits)
-        for offset in hits:
-            j = i + 1 + int(offset)
-            # Equal scores are ordered by player names in ascending order.
-            mutual = neighbors.pair(i, j)[2]
-            entry = -mutual, float(scores[offset]), -i, -j
-            if len(best) < cap:
-                heapq.heappush(best, entry)
-            elif best and entry > best[0]:
-                heapq.heapreplace(best, entry)
+        flagged += len(shortlist.add_row(i, scores, neighbors.upper_row(i)))
     if totals is not None:
         totals.update(eligible_players=len(names), pairs_above_threshold=flagged)
     rows = []
-    for _, score, neg_i, neg_j in sorted(best, reverse=True):
-        i, j = -neg_i, -neg_j
+    for i, j, score in shortlist.ordered_pairs():
         a, b = names[i], names[j]
         row = score_pair(a, b, profiles[i], profiles[j], config,
                          mutual_hands=run.shared_pair_counts.get((a, b), 0))

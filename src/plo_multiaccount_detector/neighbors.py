@@ -1,4 +1,6 @@
 """Directional top-K ranks with deterministic ties and bounded storage."""
+import heapq
+
 import numpy as np
 
 
@@ -34,3 +36,29 @@ class NeighborRanks:
             if j > i:
                 row[j - i - 1] = max(rank, self.ranks[j].get(i, self.missing))
         return row
+
+
+class ReportShortlist:
+    """Apply the report threshold and keep the best pairs within the row cap."""
+
+    def __init__(self, threshold, cap):
+        if cap < 0:
+            raise ValueError("max_candidates must be nonnegative")
+        self.threshold = threshold
+        self.cap = cap
+        self.best = []
+
+    def add_row(self, i, scores, mutual_ranks):
+        eligible = np.flatnonzero(scores >= self.threshold)
+        for offset in eligible:
+            j = i + 1 + int(offset)
+            # Player indices follow ascending account names and break score ties.
+            entry = -int(mutual_ranks[offset]), float(scores[offset]), -i, -j
+            if len(self.best) < self.cap:
+                heapq.heappush(self.best, entry)
+            elif self.best and entry > self.best[0]:
+                heapq.heapreplace(self.best, entry)
+        return eligible
+
+    def ordered_pairs(self):
+        return [(-i, -j, score) for _, score, i, j in sorted(self.best, reverse=True)]

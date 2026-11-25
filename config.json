@@ -2,7 +2,7 @@
   "table_sizes_for_stats": [6, 5],
   "min_sample_to_compare": 50,
   "min_points_to_report": 100,
-  "min_score_to_report": 2.5,
+  "min_score_to_report": 2.0,
   "neighbor_list_size": 50,
   "max_candidates": 2000,
   "exclude_generic_ipoker_players": true,

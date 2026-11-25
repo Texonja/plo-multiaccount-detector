@@ -2,13 +2,14 @@ import itertools
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from plo_multiaccount_detector.grid_prior import fit_grid_priors
 from plo_multiaccount_detector.likelihood import fit_priors
 from plo_multiaccount_detector.multiaccount import MultiaccountRun, PlayerProfile, add_split_hand, load_config, score_pair
 from plo_multiaccount_detector.neighbors import NeighborRanks
-from plo_multiaccount_detector.validation import LegacyScores, validate
+from plo_multiaccount_detector.validation import LegacyScores, evaluate, validate
 from test_parser import xml_hand
 
 
@@ -54,6 +55,33 @@ class ValidationTests(unittest.TestCase):
         for i, j in itertools.combinations(range(4), 2):
             self.assertEqual(ranks.pair(i, j)[2], ranks.pair(j, i)[2])
             self.assertEqual(ranks.upper_row(i)[j - i - 1], ranks.pair(i, j)[2])
+
+    def test_report_precision_filters_then_orders_and_caps(self):
+        import numpy as np
+
+        class Model:
+            def row(self, i, others):
+                scores = [
+                    [0, 1.9, 0, 0, 0, 0],
+                    [1.9, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 2, 3, 0],
+                    [0, 0, 2, 0, 2.5, 0],
+                    [0, 0, 3, 2.5, 0, 2.1],
+                    [0, 0, 0, 0, 2.1, 0],
+                ]
+                return np.array(scores[i])[others]
+
+        names = ["A@0", "A@1", "B@0", "B@1", "C@0", "D@0"]
+        profiles = [PlayerProfile(hands=150) for _ in names]
+        with patch("plo_multiaccount_detector.validation.LIMITS", (2, 3, 4)):
+            result = evaluate(Model(), names, profiles, [1, 0, 3, 2, None, None], 2.0, 50, 3)
+        self.assertEqual(result["threshold"]["flagged_pairs"], 4)
+        self.assertEqual(result["threshold"]["true_pairs_flagged"], 1)
+        self.assertEqual(result["report_pairs"], 3)
+        self.assertEqual(result["precision_at_k_mutual_rank"], {"2": 0, "3": 1 / 3, "4": None})
+        self.assertEqual(result["precision_at_k_mutual_rank_unfiltered"]["2"], .5)
+        self.assertEqual(result["precision_at_k"]["3"], 0)
+        self.assertEqual(result["mutual_rank_one"], {"known_twins": 1, "known_twins_passing_filter": 0})
 
     def test_vector_legacy_matches_csv_calculation(self):
         config = load_config()

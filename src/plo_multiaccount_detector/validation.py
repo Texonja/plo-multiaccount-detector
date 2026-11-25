@@ -2,7 +2,7 @@
 import numpy as np
 
 from .grid_prior import GridScores
-from .neighbors import NeighborRanks
+from .neighbors import NeighborRanks, ReportShortlist
 from .likelihood import LikelihoodScores
 from .multiaccount import _component_values, eligible_players, sample_points
 
@@ -64,14 +64,19 @@ class PrecisionAtK:
         self.labels = np.concatenate((self.labels, labels))[keep]
 
     def result(self):
-        return {str(k): float(self.labels[:k].mean()) if len(self.labels) >= k else None for k in LIMITS}
+        return _precision_at_k(self.labels)
 
 
-def evaluate(model, names, profiles, twins, threshold, neighbor_list_size):
+def _precision_at_k(labels):
+    return {str(k): float(np.mean(labels[:k])) if len(labels) >= k else None for k in LIMITS}
+
+
+def evaluate(model, names, profiles, twins, threshold, neighbor_list_size, max_candidates):
     ranks = []
-    flagged_pairs = true_flagged = 0
+    flagged_pairs = true_flagged = rank_one_twins = rank_one_twins_flagged = 0
     neighbors = NeighborRanks(model, len(names), neighbor_list_size)
     by_score, by_mutual = PrecisionAtK(), PrecisionAtK()
+    report = ReportShortlist(threshold, max_candidates)
     indexes = np.arange(len(names))
     known_pairs = sum(j is not None for j in twins) // 2
     for i, name in enumerate(names):
@@ -90,12 +95,17 @@ def evaluate(model, names, profiles, twins, threshold, neighbor_list_size):
         labels = np.zeros(len(upper), dtype=bool)
         if j is not None and j > i:
             labels[j - i - 1] = True
-        flagged = upper >= threshold
-        flagged_pairs += int(np.count_nonzero(flagged))
-        true_flagged += int(np.count_nonzero(labels & flagged))
+        mutual_ranks = neighbors.upper_row(i)
+        eligible = report.add_row(i, upper, mutual_ranks)
+        flagged_pairs += len(eligible)
+        true_flagged += int(np.count_nonzero(labels[eligible]))
+        rank_one = labels & (mutual_ranks == 1)
+        rank_one_twins += int(np.count_nonzero(rank_one))
+        rank_one_twins_flagged += int(np.count_nonzero(rank_one[eligible]))
         by_score.add(upper, labels)
-        by_mutual.add(upper, labels, neighbors.upper_row(i))
+        by_mutual.add(upper, labels, mutual_ranks)
 
+    report_twins = [twins[i] == j for i, j, _ in report.ordered_pairs()]
     buckets = {}
     for lo, hi in BUCKETS:
         group = [r for r in ranks if r["smaller_half_hands"] >= lo and
@@ -106,8 +116,11 @@ def evaluate(model, names, profiles, twins, threshold, neighbor_list_size):
         "threshold": {"minimum": threshold, "flagged_pairs": flagged_pairs, "true_pairs_flagged": true_flagged,
                       "precision": true_flagged / flagged_pairs if flagged_pairs else None,
                       "recall": true_flagged / known_pairs if known_pairs else None},
+        "report_pairs": len(report_twins),
+        "precision_at_k_mutual_rank": _precision_at_k(report_twins),
+        "precision_at_k_mutual_rank_unfiltered": by_mutual.result(),
         "precision_at_k": by_score.result(),
-        "precision_at_k_mutual_rank": by_mutual.result(),
+        "mutual_rank_one": {"known_twins": rank_one_twins, "known_twins_passing_filter": rank_one_twins_flagged},
         "twin_ranks": ranks,
     }
 
@@ -118,23 +131,28 @@ def validate(split, priors, config, grid_prior):
     profiles = [split.player_stats[name] for name in names]
     twins = [positions.get(name[:-1] + ("1" if name[-1] == "0" else "0")) for name in names]
     size = int(config["neighbor_list_size"])
+    cap = int(config["max_candidates"])
     return {
         "neighbor_list_size": size,
         "assumption": ASSUMPTION, "split": "hand_id % 2",
-        "precision_at_k_ties": "All eligible pairs, before the score filter. Mutual order uses mutual rank first. Both use descending score, then ascending account names. Null if fewer than K pairs exist.",
+        "max_candidates": cap,
+        "precision_at_k_scope": {
+            "precision_at_k_mutual_rank": "Apply the report threshold, sort by ascending mutual rank and descending score, then apply the report cap.",
+            "precision_at_k_mutual_rank_unfiltered": "Same order across all eligible pairs, without the threshold or cap.",
+            "precision_at_k": "Descending score across all eligible pairs, without the threshold or cap.",
+        },
+        "precision_at_k_ties": "Break ties by ascending account names. Each result is null if fewer than K pairs are available.",
         "eligible_accounts": len(names), "known_pairs": sum(j is not None for j in twins) // 2,
         "compared_pairs": len(names) * (len(names) - 1) // 2,
-        "lr": evaluate(GridScores(profiles, grid_prior), names, profiles, twins, config["min_score_to_report"], size),
-        "legacy_beta": evaluate(LikelihoodScores(profiles, priors), names, profiles, twins, config["min_score_to_report"], size),
-        "legacy": evaluate(LegacyScores(profiles, config), names, profiles, twins, config["min_points_to_report"], size),
+        "lr": evaluate(GridScores(profiles, grid_prior), names, profiles, twins, float(config["min_score_to_report"]), size, cap),
+        "legacy_beta": evaluate(LikelihoodScores(profiles, priors), names, profiles, twins, float(config["min_score_to_report"]), size, cap),
+        "legacy": evaluate(LegacyScores(profiles, config), names, profiles, twins, float(config["min_points_to_report"]), size, cap),
     }
 
 
 def self_test_line(result):
-    overall = result["lr"]["overall"]
-    if not overall["accounts"]:
-        return "Self-test: no eligible twin pairs."
-    low = overall["pessimistic"]["top_10_rate"]
-    high = overall["optimistic"]["top_10_rate"]
-    rate = f"{low:.1%}" if low == high else f"{low:.1%}–{high:.1%}"
-    return f"Self-test: twin in the top 10 for {rate} of {overall['accounts']:,} accounts."
+    report = result["lr"]
+    precision = report["precision_at_k_mutual_rank"]["100"]
+    if precision is None:
+        return f"Self-test: {report['report_pairs']:,} split pairs in the report."
+    return f"Self-test: {precision:.0%} known twins in the first 100 reported pairs."
