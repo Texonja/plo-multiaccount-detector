@@ -32,7 +32,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "table_sizes_for_stats": [6, 5],
     "min_sample_to_compare": 50,
     "min_points_to_report": 100,
-    "min_score_to_report": 3.0,
+    "min_score_to_report": 2.5,
     "max_candidates": 2000,
     "exclude_generic_ipoker_players": True,
     "points": {

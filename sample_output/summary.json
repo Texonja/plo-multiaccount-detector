@@ -4,8 +4,33 @@
   "parse_errors": 0,
   "unique_players_with_stats_sample": 2713,
   "shared_pair_count": 40781,
-  "candidate_count": 1507,
-  "important_note": "Risk points are configurable review-priority points based on player-side data only; they are not proof of multiaccounting.",
+  "candidate_count": 1753,
+  "priors": {
+    "vpip": {
+      "alpha": 2.8943861368721295,
+      "beta": 1.6716498621185834
+    },
+    "pfr_given_vpip": {
+      "alpha": 1.2557769329145438,
+      "beta": 2.7069636890478503
+    },
+    "threebet": {
+      "alpha": 1.3986812816510885,
+      "beta": 19.446612506681873
+    },
+    "wtsd": {
+      "alpha": 33.15297619768784,
+      "beta": 68.8024456621138
+    },
+    "wonsd": {
+      "alpha": 55.473870747630244,
+      "beta": 63.88885753747045
+    }
+  },
+  "eligible_players": 1247,
+  "pairs_above_threshold": 1753,
+  "self_test": "Self-test: twin in the top 10 for 28.9% of 1,652 accounts.",
+  "score_units": "log10 likelihood ratio",
   "config": {
     "table_sizes_for_stats": [
       6,
@@ -13,7 +38,8 @@
     ],
     "min_sample_to_compare": 50,
     "min_points_to_report": 100,
-    "max_candidates": 10000,
+    "min_score_to_report": 2.5,
+    "max_candidates": 2000,
     "exclude_generic_ipoker_players": true,
     "points": {
       "vpip": [
