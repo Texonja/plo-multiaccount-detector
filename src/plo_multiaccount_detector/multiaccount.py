@@ -184,7 +184,7 @@ def _live_sets(hand: ParsedHand) -> tuple[set[str], set[str]]:
     return saw_flop, showdown if len(showdown) >= 2 else set()
 
 
-def add_hand(run: MultiaccountRun, hand: ParsedHand, *, table_sizes_for_stats: set[int]) -> None:
+def add_hand(run: MultiaccountRun, hand: ParsedHand, *, table_sizes_for_stats: set[int], name_suffix: str = "") -> None:
     run.hands_parsed += 1
     players = sorted(hand.active_players)
     if len(players) < 2:
@@ -193,8 +193,8 @@ def add_hand(run: MultiaccountRun, hand: ParsedHand, *, table_sizes_for_stats: s
     # Shared table evidence is tracked across all observed PLO table sizes.
     # The count is kept because zero shared hands and high shared-hand volume
     # mean different things for manual review.
-    for a, b in combinations(players, 2):
-        run.shared_pair_counts[pair_key(a, b)] += 1
+    for a, b in combinations(sorted(p + name_suffix for p in players), 2):
+        run.shared_pair_counts[a, b] += 1
 
     # Playing-profile stats are intentionally restricted to configured table
     # sizes, by default 6-handed and 5-handed only.
@@ -234,7 +234,7 @@ def add_hand(run: MultiaccountRun, hand: ParsedHand, *, table_sizes_for_stats: s
 
     ts = hand.timestamp.isoformat(sep=" ") if hand.timestamp else ""
     for p in players:
-        ps = run.player_stats[p]
+        ps = run.player_stats[p + name_suffix]
         ps.hands += 1
         if not ps.first_seen or (ts and ts < ps.first_seen):
             ps.first_seen = ts
@@ -254,6 +254,10 @@ def add_hand(run: MultiaccountRun, hand: ParsedHand, *, table_sizes_for_stats: s
             ps.went_to_showdown += 1
             if net.get(p, 0.0) > 0:
                 ps.won_at_showdown += 1
+
+
+def add_split_hand(run, hand, *, table_sizes_for_stats):
+    add_hand(run, hand, table_sizes_for_stats=table_sizes_for_stats, name_suffix=f"@{hand.hand_id % 2}")
 
 
 def relative_diff_pct(a: float, b: float) -> float:

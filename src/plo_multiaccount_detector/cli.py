@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import re
 import sys
 import time
 
 from .hm2_backup import iter_hm2_handhistories
+from .validation import self_test_line, validate
 from .likelihood import fit_priors
 from .hh_parser import parse_hand_history
 from .multiaccount import (
     MultiaccountRun,
     add_hand,
+    add_split_hand,
     find_candidates,
     load_config,
     write_csv,
@@ -33,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--site-id", type=int, default=4, help="HM2 pokersite_id; 4 is iPoker in the supplied backup")
     p.add_argument("--contains", default="Omaha PL", help="Fast raw hand-history substring filter")
     p.add_argument("--top", type=int, default=100, help="Rows in Markdown summary")
+    p.add_argument("--no-validate", action="store_true", help="Skip split-half self-test")
     p.add_argument("--no-dedupe", action="store_true", help="Do not deduplicate by site+gamenumber")
     p.add_argument("--progress-every", type=int, default=25000, help="Progress interval in processed rows; 0 disables")
     return p
@@ -54,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     table_sizes = {int(x) for x in config.get("table_sizes_for_stats", [6, 5])}
 
     run = MultiaccountRun()
+    split = None if args.no_validate else MultiaccountRun()
     start = time.time()
     rows_seen = 0
     seen_keys: set[tuple[int, int]] = set()
@@ -70,6 +75,8 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 hand = parse_hand_history(row.handhistory, fallback_hand_id=row.gamenumber)
                 add_hand(run, hand, table_sizes_for_stats=table_sizes)
+                if split is not None:
+                    add_split_hand(split, hand, table_sizes_for_stats=table_sizes)
             except Exception as exc:
                 run.parse_errors += 1
                 if len(run.parse_error_rows) < 1000:
@@ -89,10 +96,18 @@ def main(argv: list[str] | None = None) -> int:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    validation_path = out / "validation.json"
+    self_test = None
+    if split is not None:
+        result = validate(split, priors, config)
+        validation_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+        self_test = self_test_line(result)
+    else:
+        validation_path.unlink(missing_ok=True)
     write_csv(out / "multiaccount_candidates.csv", candidates)
-    write_top_markdown(out / "top_candidates.md", candidates, top=args.top)
+    write_top_markdown(out / "top_candidates.md", candidates, top=args.top, self_test=self_test)
     write_summary(out / "summary.json", run=run, rows=candidates, config=config, input_path=str(input_path),
-                  priors=priors, totals=totals)
+                  priors=priors, totals=totals, self_test=self_test)
     if run.parse_error_rows:
         write_csv_any(out / "parse_errors.csv", run.parse_error_rows)
 

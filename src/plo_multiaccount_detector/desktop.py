@@ -189,7 +189,7 @@ class DetectorWindow:
         config = info.get("config") or {}
         sizes = config.get("table_sizes_for_stats") if isinstance(config, dict) else None
         self.table_sizes.configure(text="  /  ".join(f"{s}-max" for s in sizes) if isinstance(sizes,list) else "")
-        self.message.set("Ready")
+        self.message.set(info.get("self_test") or "Ready")
 
     def open_report(self):
         path = filedialog.askopenfilename(parent=self.root, title="Open report",
@@ -282,7 +282,7 @@ class DetectorWindow:
             stage.rename(dest)
             report.path = dest / CSV_NAME
             self.display(report)
-            self.message.set("Analysis complete")
+            self.message.set(report.summary.get("self_test") or "Analysis complete")
         except (OSError, ValueError, csv.Error) as exc:
             self.message.set("Analysis failed")
             messagebox.showerror("Analysis", str(exc), parent=self.root)
